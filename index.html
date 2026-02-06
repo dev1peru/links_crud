@@ -2,22 +2,24 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Links CRUD</title>
+<title>My Links</title>
 <style>
-  body { font-family: Arial; margin: 20px; background:#f7f7f7; }
-
+  body { font-family: Arial, sans-serif; margin: 20px; background:#f7f7f7; }
   .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
   .topbar h2 { margin:0; }
   .right { display:flex; gap:8px; align-items:center; }
+  .hint { font-size:12px; opacity:.7; }
 
-  /* VIEW MODE GRID */
+  /* VIEW MODE: 3 columns max */
   .grid.view-layout{
     display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    grid-template-columns:repeat(3, 1fr);
     gap:12px;
   }
+  @media (max-width: 1100px){ .grid.view-layout{ grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width: 700px){ .grid.view-layout{ grid-template-columns:repeat(1, 1fr); } }
 
-  /* EDIT MODE VERTICAL */
+  /* EDIT MODE: vertical list */
   .grid.edit-layout{
     display:flex;
     flex-direction:column;
@@ -31,31 +33,24 @@
     padding:12px;
     background:white;
   }
-
-  .grid.edit-layout .section-card{
-    width:100%;
-    max-width:1100px;
-  }
-
+  .grid.edit-layout .section-card{ width:100%; max-width:1100px; }
   .section-card.dragging { opacity:.5; }
 
-  .section-header { display:flex; justify-content:space-between; align-items:center; }
-  .section-title { display:flex; gap:8px; align-items:center; }
-
-  .section-handle, .drag-handle {
-    cursor:grab;
-    user-select:none;
-    opacity:.7;
-  }
+  .section-header { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .section-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+  .section-handle, .drag-handle { cursor:grab; user-select:none; opacity:.7; font-size:14px; }
 
   .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-  input { flex:1; min-width:240px; padding:8px; border-radius:8px; border:1px solid #ddd; }
+  input, select {
+    flex:1; min-width:220px; padding:8px;
+    border-radius:8px; border:1px solid #ddd;
+  }
 
   button { cursor:pointer; padding:8px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
   button:disabled { opacity:.5; cursor:not-allowed; }
-
-  .btn-primary { background:#111; color:white; }
-  .btn-danger { background:#ff4d4d; color:white; font-size:12px; padding:4px 8px; border-radius:8px; }
+  .btn-primary { background:#111; color:white; border-color:#111; }
+  .btn-danger { background:#ff4d4d; color:white; font-size:12px; padding:4px 8px; border-radius:8px; border-color:#ff4d4d; }
+  .btn-small { padding:6px 10px; font-size:12px; }
 
   .link-row {
     display:flex; align-items:center; gap:10px;
@@ -65,13 +60,25 @@
     margin:6px 0;
     background:white;
   }
-
   .link-row.dragging { opacity:.5; }
-  .link-title { flex:1; text-decoration:none; color:#111; }
+  .link-title { flex:1; text-decoration:none; color:#111; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .link-title:hover { text-decoration:underline; }
 
   .hidden { display:none !important; }
-  .hint { font-size:12px; opacity:.7; }
+
+  /* Section color styling (subtle top border) */
+  .section-color-bar { height:6px; border-radius:10px; margin:-12px -12px 10px -12px; }
+  .c-slate { background:#64748b; }
+  .c-blue { background:#3b82f6; }
+  .c-green { background:#22c55e; }
+  .c-amber { background:#f59e0b; }
+  .c-red { background:#ef4444; }
+  .c-purple { background:#a855f7; }
+  .c-pink { background:#ec4899; }
+  .c-teal { background:#14b8a6; }
+
+  .edit-inline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; }
+  .edit-inline input { min-width:200px; }
 </style>
 </head>
 <body>
@@ -98,6 +105,17 @@ let dirtySectionsOrder = false;
 const dirtyLinksOrderBySection = new Set();
 let draggedLinkEl = null;
 let draggedSectionCard = null;
+
+const COLORS = [
+  { value:"slate", label:"Slate" },
+  { value:"blue", label:"Blue" },
+  { value:"green", label:"Green" },
+  { value:"amber", label:"Amber" },
+  { value:"red", label:"Red" },
+  { value:"purple", label:"Purple" },
+  { value:"pink", label:"Pink" },
+  { value:"teal", label:"Teal" },
+];
 
 function toggleEdit(){
   editMode = !editMode;
@@ -138,10 +156,16 @@ function setTopbar(){
   }
 }
 
+function colorOptionsHtml(selected){
+  return COLORS.map(c => `<option value="${c.value}" ${c.value===selected?"selected":""}>${c.label}</option>`).join("");
+}
+
 async function load(){
   setTopbar();
+
   const res = await fetch("/sections");
   const sections = await res.json();
+
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
 
@@ -151,19 +175,39 @@ async function load(){
     card.dataset.sectionId = s.id;
     card.draggable = editMode;
 
-    card.innerHTML = `
-      <div class="section-header">
-        <div class="section-title">
-          <span class="section-handle ${editMode?"":"hidden"}">☰</span>
-          <h3 style="margin:0">${s.name}</h3>
+    const color = (s.color || "slate").toLowerCase();
+
+    const titleBlock = editMode
+      ? `
+        <div class="edit-inline">
+          <input id="rename-${s.id}" value="${escapeAttr(s.name)}">
+          <button class="btn-small" onclick="updateSectionName(${s.id})">Rename</button>
+
+          <select id="color-${s.id}">
+            ${colorOptionsHtml(color)}
+          </select>
+          <button class="btn-small" onclick="updateSectionColor(${s.id})">Set Color</button>
         </div>
-        <button class="btn-danger ${editMode?"":"hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
+      `
+      : `<h3 style="margin:0">${escapeHtml(s.name)}</h3>`;
+
+    card.innerHTML = `
+      <div class="section-color-bar c-${color}"></div>
+
+      <div class="section-header">
+        <div class="section-left">
+          <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
+          ${titleBlock}
+        </div>
+        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
       </div>
-      <div class="row ${editMode?"":"hidden"}">
+
+      <div class="row ${editMode ? "" : "hidden"}">
         <input id="title-${s.id}" placeholder="Title">
         <input id="url-${s.id}" placeholder="https://...">
         <button onclick="addLink(${s.id})">Add</button>
       </div>
+
       <div id="links-${s.id}"></div>
     `;
 
@@ -171,6 +215,7 @@ async function load(){
     grid.appendChild(card);
 
     const linksDiv = card.querySelector(`#links-${s.id}`);
+
     s.links.forEach(l => {
       const row = document.createElement("div");
       row.className = "link-row";
@@ -178,10 +223,18 @@ async function load(){
       row.dataset.sectionId = s.id;
       row.draggable = editMode;
 
+      const linkView = `<a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>`;
+
+      const linkEdit = `
+        <input id="lt-${l.id}" value="${escapeAttr(l.title)}">
+        <input id="lu-${l.id}" value="${escapeAttr(l.url)}">
+        <button class="btn-small" onclick="updateLink(${l.id})">Update</button>
+      `;
+
       row.innerHTML = `
-        <span class="drag-handle ${editMode?"":"hidden"}">☰</span>
-        <a href="${l.url}" target="_blank" class="link-title">${l.title}</a>
-        <button class="btn-danger ${editMode?"":"hidden"}" onclick="deleteLink(${l.id})">✕</button>
+        <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
+        ${editMode ? linkEdit : linkView}
+        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
       `;
 
       if (editMode) addLinkDnDHandlers(row);
@@ -190,62 +243,259 @@ async function load(){
   });
 }
 
+/* -------------------------
+   Sections CRUD + Color
+------------------------- */
 async function createSection(){
+  if (!editMode) return;
+
   const input = document.getElementById("sectionName");
   const name = input.value.trim();
   if (!name) return;
 
-  await fetch("/sections", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+  const r = await fetch("/sections", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Add section failed (${r.status}): ${txt}`);
+    return;
+  }
+
   input.value = "";
   load();
 }
 
-async function deleteSection(id){ if(confirm("Delete section?")){ await fetch(`/sections/${id}`,{method:"DELETE"}); load(); } }
+async function updateSectionName(id){
+  if (!editMode) return;
+  const el = document.getElementById(`rename-${id}`);
+  const name = el.value.trim();
+  if (!name) return alert("Name cannot be empty");
 
+  const r = await fetch(`/sections/${id}`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Rename failed (${r.status}): ${txt}`);
+    return;
+  }
+  load();
+}
+
+async function updateSectionColor(id){
+  if (!editMode) return;
+  const el = document.getElementById(`color-${id}`);
+  const color = el.value;
+
+  const r = await fetch(`/sections/${id}`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({color})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Set color failed (${r.status}): ${txt}`);
+    return;
+  }
+  load();
+}
+
+async function deleteSection(id){
+  if (!editMode) return;
+  if(!confirm("Delete section and all its links?")) return;
+
+  const r = await fetch(`/sections/${id}`, {method:"DELETE"});
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Delete failed (${r.status}): ${txt}`);
+    return;
+  }
+  load();
+}
+
+/* -------------------------
+   Links CRUD (Create + Edit)
+------------------------- */
 async function addLink(sid){
+  if (!editMode) return;
+
   const tEl = document.getElementById(`title-${sid}`);
   const uEl = document.getElementById(`url-${sid}`);
-  const t = tEl.value.trim();
-  const u = uEl.value.trim();
-  if(!t||!u) return;
-  await fetch(`/sections/${sid}/links`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t,url:u})});
+  const title = tEl.value.trim();
+  const url = uEl.value.trim();
+  if(!title || !url) return;
+
+  const r = await fetch(`/sections/${sid}/links`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({title, url})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Add link failed (${r.status}): ${txt}`);
+    return;
+  }
+
   tEl.value=""; uEl.value="";
   load();
 }
 
-async function deleteLink(id){ if(confirm("Delete link?")){ await fetch(`/links/${id}`,{method:"DELETE"}); load(); } }
+async function updateLink(linkId){
+  if (!editMode) return;
 
+  const tEl = document.getElementById(`lt-${linkId}`);
+  const uEl = document.getElementById(`lu-${linkId}`);
+  const title = tEl.value.trim();
+  const url = uEl.value.trim();
+  if(!title || !url) return;
+
+  const r = await fetch(`/links/${linkId}`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({title, url})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Update failed (${r.status}): ${txt}`);
+    return;
+  }
+  load();
+}
+
+async function deleteLink(id){
+  if (!editMode) return;
+  if(!confirm("Delete this link?")) return;
+
+  const r = await fetch(`/links/${id}`, {method:"DELETE"});
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Delete failed (${r.status}): ${txt}`);
+    return;
+  }
+  load();
+}
+
+/* -------------------------
+   DnD: Sections (vertical)
+------------------------- */
 function addSectionDnDHandlers(card){
   const grid = document.getElementById("grid");
-  card.addEventListener("dragstart", ()=>{ draggedSectionCard=card; card.classList.add("dragging"); });
-  card.addEventListener("dragend", ()=>{ card.classList.remove("dragging"); dirtySectionsOrder=true; });
-  card.addEventListener("dragover", e=>{
+
+  card.addEventListener("dragstart", () => {
+    draggedSectionCard = card;
+    card.classList.add("dragging");
+  });
+
+  card.addEventListener("dragend", () => {
+    card.classList.remove("dragging");
+    draggedSectionCard = null;
+    dirtySectionsOrder = true;
+  });
+
+  card.addEventListener("dragover", (e) => {
     e.preventDefault();
-    const after=[...grid.querySelectorAll(".section-card:not(.dragging)")].find(el=>e.clientY<el.getBoundingClientRect().top+el.offsetHeight/2);
-    if(after) grid.insertBefore(draggedSectionCard,after); else grid.appendChild(draggedSectionCard);
+    if (!draggedSectionCard) return;
+
+    const after = [...grid.querySelectorAll(".section-card:not(.dragging)")]
+      .find(el => e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2);
+
+    if (after) grid.insertBefore(draggedSectionCard, after);
+    else grid.appendChild(draggedSectionCard);
   });
 }
 
 async function persistSectionOrder(){
-  const ordered=[...document.querySelectorAll(".section-card")].map(x=>Number(x.dataset.sectionId));
-  await fetch(`/sections/reorder`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+  const ordered = [...document.querySelectorAll(".section-card")]
+    .map(x => Number(x.dataset.sectionId));
+
+  const r = await fetch(`/sections/reorder`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ordered_ids: ordered})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Save section order failed (${r.status}): ${txt}`);
+  }
 }
 
+/* -------------------------
+   DnD: Links
+------------------------- */
 function addLinkDnDHandlers(el){
-  el.addEventListener("dragstart", ()=>{ draggedLinkEl=el; el.classList.add("dragging"); });
-  el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dirtyLinksOrderBySection.add(Number(el.dataset.sectionId)); });
-  el.addEventListener("dragover", e=>{
+  el.addEventListener("dragstart", () => {
+    draggedLinkEl = el;
+    el.classList.add("dragging");
+  });
+
+  el.addEventListener("dragend", () => {
+    el.classList.remove("dragging");
+    dirtyLinksOrderBySection.add(Number(el.dataset.sectionId));
+    draggedLinkEl = null;
+  });
+
+  el.addEventListener("dragover", (e) => {
     e.preventDefault();
-    const container=el.parentElement;
-    const after=[...container.querySelectorAll(".link-row:not(.dragging)")].find(child=>e.clientY<child.getBoundingClientRect().top+child.offsetHeight/2);
-    if(after) container.insertBefore(draggedLinkEl,after); else container.appendChild(draggedLinkEl);
+    const container = el.parentElement;
+
+    const after = [...container.querySelectorAll(".link-row:not(.dragging)")]
+      .find(child => e.clientY < child.getBoundingClientRect().top + child.offsetHeight / 2);
+
+    if (!draggedLinkEl) return;
+
+    if (after) container.insertBefore(draggedLinkEl, after);
+    else container.appendChild(draggedLinkEl);
   });
 }
 
 async function persistLinkOrder(sectionId){
-  const container=document.getElementById(`links-${sectionId}`);
-  const ordered=[...container.querySelectorAll(".link-row")].map(x=>Number(x.dataset.linkId));
-  await fetch(`/sections/${sectionId}/links/reorder`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+  const container = document.getElementById(`links-${sectionId}`);
+  if (!container) return;
+
+  const ordered = [...container.querySelectorAll(".link-row")]
+    .map(x => Number(x.dataset.linkId));
+
+  const r = await fetch(`/sections/${sectionId}/links/reorder`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ordered_ids: ordered})
+  });
+
+  if (!r.ok){
+    const txt = await r.text();
+    alert(`Save link order failed (${r.status}): ${txt}`);
+  }
+}
+
+/* -------------------------
+   Escapes
+------------------------- */
+function escapeHtml(str){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function escapeAttr(str){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;");
 }
 
 load();
