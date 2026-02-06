@@ -6,22 +6,18 @@
 <style>
   body { font-family: Arial; margin: 20px; background:#f7f7f7; }
 
-  .topbar {
-    display:flex; align-items:center; justify-content:space-between;
-    gap:12px; margin-bottom: 12px;
-  }
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .topbar h2 { margin:0; }
+  .right { display:flex; gap:8px; align-items:center; }
 
-  .topbar h2 { margin: 0; }
-  .topbar .right { display:flex; gap:8px; align-items:center; }
-
-  /* VIEW MODE (grid layout) */
+  /* VIEW MODE GRID */
   .grid.view-layout{
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
     gap:12px;
   }
 
-  /* EDIT MODE (vertical centered list) */
+  /* EDIT MODE VERTICAL */
   .grid.edit-layout{
     display:flex;
     flex-direction:column;
@@ -41,35 +37,27 @@
     max-width:1100px;
   }
 
-  .section-card.dragging { opacity: .5; }
+  .section-card.dragging { opacity:.5; }
 
-  .section-header {
-    display:flex; align-items:center; justify-content:space-between;
-    gap:10px;
-  }
+  .section-header { display:flex; justify-content:space-between; align-items:center; }
+  .section-title { display:flex; gap:8px; align-items:center; }
 
-  .section-title {
-    display:flex; align-items:center; gap:8px;
-  }
-
-  .section-handle {
-    cursor: grab;
+  .section-handle, .drag-handle {
+    cursor:grab;
     user-select:none;
-    font-size: 14px;
-    opacity: .7;
+    opacity:.7;
   }
 
   .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-  input { flex:1; min-width:240px; padding:8px; border:1px solid #ddd; border-radius:8px; }
+  input { flex:1; min-width:240px; padding:8px; border-radius:8px; border:1px solid #ddd; }
+
   button { cursor:pointer; padding:8px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
-  button:disabled { cursor:not-allowed; opacity:.5; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
 
-  .btn-primary { border:1px solid #111; background:#111; color:white; }
-  .btn-danger { border:1px solid #ff4d4d; background:#ff4d4d; color:white; padding:4px 8px; font-size:12px; border-radius:8px; }
-  .hint { font-size: 12px; opacity: 0.75; }
+  .btn-primary { background:#111; color:white; }
+  .btn-danger { background:#ff4d4d; color:white; font-size:12px; padding:4px 8px; border-radius:8px; }
 
-  /* LINKS */
-  .link-row{
+  .link-row {
     display:flex; align-items:center; gap:10px;
     padding:6px 8px;
     border:1px solid #eee;
@@ -79,22 +67,11 @@
   }
 
   .link-row.dragging { opacity:.5; }
-
-  .drag-handle{
-    cursor: grab;
-    user-select:none;
-    font-size:14px;
-    opacity:.7;
-  }
-
-  .link-title{
-    flex:1;
-    text-decoration:none;
-    color:#111;
-  }
-
+  .link-title { flex:1; text-decoration:none; color:#111; }
   .link-title:hover { text-decoration:underline; }
+
   .hidden { display:none !important; }
+  .hint { font-size:12px; opacity:.7; }
 </style>
 </head>
 <body>
@@ -108,16 +85,14 @@
 </div>
 
 <div class="row">
-  <input id="sectionName" placeholder="New section name (e.g., Tools)" />
+  <input id="sectionName" placeholder="New section name (e.g., Tools)">
   <button id="addSectionBtn" onclick="createSection()" disabled>Add Section</button>
 </div>
 
-<hr/>
-
+<hr>
 <div id="grid" class="grid view-layout"></div>
 
 <script>
-const API = "";
 let editMode = false;
 let dirtySectionsOrder = false;
 const dirtyLinksOrderBySection = new Set();
@@ -135,12 +110,11 @@ function toggleEdit(){
 
 async function saveAllOrders(){
   if (dirtySectionsOrder) {
-    const grid = document.getElementById("grid");
-    await persistSectionOrder(grid);
+    await persistSectionOrder();
     dirtySectionsOrder = false;
   }
-  for (const sectionId of dirtyLinksOrderBySection) {
-    await persistLinkOrder(sectionId);
+  for (const sid of dirtyLinksOrderBySection) {
+    await persistLinkOrder(sid);
   }
   dirtyLinksOrderBySection.clear();
 }
@@ -148,27 +122,25 @@ async function saveAllOrders(){
 function setTopbar(){
   const hint = document.getElementById("modeHint");
   const btn = document.getElementById("editBtn");
-  const addSectionBtn = document.getElementById("addSectionBtn");
+  const addBtn = document.getElementById("addSectionBtn");
   const grid = document.getElementById("grid");
 
-  if (editMode) {
+  if (editMode){
     hint.textContent = "Edit mode";
     btn.textContent = "Save";
-    addSectionBtn.disabled = false;
-    grid.classList.remove("view-layout");
-    grid.classList.add("edit-layout");
+    addBtn.disabled = false;
+    grid.className = "grid edit-layout";
   } else {
     hint.textContent = "View mode";
     btn.textContent = "Edit";
-    addSectionBtn.disabled = true;
-    grid.classList.remove("edit-layout");
-    grid.classList.add("view-layout");
+    addBtn.disabled = true;
+    grid.className = "grid view-layout";
   }
 }
 
 async function load(){
   setTopbar();
-  const res = await fetch(`/sections`);
+  const res = await fetch("/sections");
   const sections = await res.json();
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
@@ -182,22 +154,20 @@ async function load(){
     card.innerHTML = `
       <div class="section-header">
         <div class="section-title">
-          <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
-          <h3 style="margin:0;">${escapeHtml(s.name)}</h3>
+          <span class="section-handle ${editMode?"":"hidden"}">☰</span>
+          <h3 style="margin:0">${s.name}</h3>
         </div>
-        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
+        <button class="btn-danger ${editMode?"":"hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
       </div>
-
-      <div class="row ${editMode ? "" : "hidden"}">
-        <input id="title-${s.id}" placeholder="Title"/>
-        <input id="url-${s.id}" placeholder="https://..."/>
+      <div class="row ${editMode?"":"hidden"}">
+        <input id="title-${s.id}" placeholder="Title">
+        <input id="url-${s.id}" placeholder="https://...">
         <button onclick="addLink(${s.id})">Add</button>
       </div>
-
       <div id="links-${s.id}"></div>
     `;
 
-    if (editMode) addSectionDnDHandlers(card, grid);
+    if (editMode) addSectionDnDHandlers(card);
     grid.appendChild(card);
 
     const linksDiv = card.querySelector(`#links-${s.id}`);
@@ -209,67 +179,74 @@ async function load(){
       row.draggable = editMode;
 
       row.innerHTML = `
-        <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
-        <a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>
-        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
+        <span class="drag-handle ${editMode?"":"hidden"}">☰</span>
+        <a href="${l.url}" target="_blank" class="link-title">${l.title}</a>
+        <button class="btn-danger ${editMode?"":"hidden"}" onclick="deleteLink(${l.id})">✕</button>
       `;
+
       if (editMode) addLinkDnDHandlers(row);
       linksDiv.appendChild(row);
     });
   });
 }
 
-function addSectionDnDHandlers(card, grid){
-  card.addEventListener("dragstart", e => { draggedSectionCard = card; card.classList.add("dragging"); });
-  card.addEventListener("dragend", () => { card.classList.remove("dragging"); dirtySectionsOrder = true; });
-  card.addEventListener("dragover", e => {
-    e.preventDefault();
-    const after = [...grid.querySelectorAll(".section-card:not(.dragging)")].find(el => e.clientY < el.getBoundingClientRect().top + el.offsetHeight/2);
-    if (after) grid.insertBefore(draggedSectionCard, after); else grid.appendChild(draggedSectionCard);
-  });
-}
-
-async function persistSectionOrder(grid){
-  const ordered = [...grid.querySelectorAll(".section-card")].map(x => Number(x.dataset.sectionId));
-  await fetch(`/sections/reorder`, {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
-}
-
-function addLinkDnDHandlers(el){
-  el.addEventListener("dragstart", ()=>{ draggedLinkEl = el; el.classList.add("dragging"); });
-  el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dirtyLinksOrderBySection.add(Number(el.dataset.sectionId)); });
-  el.addEventListener("dragover", e=>{
-    e.preventDefault();
-    const container = el.parentElement;
-    const after = [...container.querySelectorAll(".link-row:not(.dragging)")].find(child => e.clientY < child.getBoundingClientRect().top + child.offsetHeight/2);
-    if (after) container.insertBefore(draggedLinkEl, after); else container.appendChild(draggedLinkEl);
-  });
-}
-
-async function persistLinkOrder(sectionId){
-  const container = document.getElementById(`links-${sectionId}`);
-  const ordered = [...container.querySelectorAll(".link-row")].map(x => Number(x.dataset.linkId));
-  await fetch(`/sections/${sectionId}/links/reorder`, {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
-}
-
 async function createSection(){
-  const name = sectionName.value.trim();
+  const input = document.getElementById("sectionName");
+  const name = input.value.trim();
   if (!name) return;
-  await fetch(`/sections`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
-  sectionName.value = "";
+
+  await fetch("/sections", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+  input.value = "";
   load();
 }
 
 async function deleteSection(id){ if(confirm("Delete section?")){ await fetch(`/sections/${id}`,{method:"DELETE"}); load(); } }
+
 async function addLink(sid){
-  const t=document.getElementById(`title-${sid}`).value.trim();
-  const u=document.getElementById(`url-${sid}`).value.trim();
+  const tEl = document.getElementById(`title-${sid}`);
+  const uEl = document.getElementById(`url-${sid}`);
+  const t = tEl.value.trim();
+  const u = uEl.value.trim();
   if(!t||!u) return;
   await fetch(`/sections/${sid}/links`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t,url:u})});
+  tEl.value=""; uEl.value="";
   load();
 }
+
 async function deleteLink(id){ if(confirm("Delete link?")){ await fetch(`/links/${id}`,{method:"DELETE"}); load(); } }
 
-function escapeHtml(str){return String(str).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
+function addSectionDnDHandlers(card){
+  const grid = document.getElementById("grid");
+  card.addEventListener("dragstart", ()=>{ draggedSectionCard=card; card.classList.add("dragging"); });
+  card.addEventListener("dragend", ()=>{ card.classList.remove("dragging"); dirtySectionsOrder=true; });
+  card.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const after=[...grid.querySelectorAll(".section-card:not(.dragging)")].find(el=>e.clientY<el.getBoundingClientRect().top+el.offsetHeight/2);
+    if(after) grid.insertBefore(draggedSectionCard,after); else grid.appendChild(draggedSectionCard);
+  });
+}
+
+async function persistSectionOrder(){
+  const ordered=[...document.querySelectorAll(".section-card")].map(x=>Number(x.dataset.sectionId));
+  await fetch(`/sections/reorder`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+}
+
+function addLinkDnDHandlers(el){
+  el.addEventListener("dragstart", ()=>{ draggedLinkEl=el; el.classList.add("dragging"); });
+  el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dirtyLinksOrderBySection.add(Number(el.dataset.sectionId)); });
+  el.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const container=el.parentElement;
+    const after=[...container.querySelectorAll(".link-row:not(.dragging)")].find(child=>e.clientY<child.getBoundingClientRect().top+child.offsetHeight/2);
+    if(after) container.insertBefore(draggedLinkEl,after); else container.appendChild(draggedLinkEl);
+  });
+}
+
+async function persistLinkOrder(sectionId){
+  const container=document.getElementById(`links-${sectionId}`);
+  const ordered=[...container.querySelectorAll(".link-row")].map(x=>Number(x.dataset.linkId));
+  await fetch(`/sections/${sectionId}/links/reorder`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+}
 
 load();
 </script>
