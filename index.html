@@ -12,7 +12,19 @@
   .topbar h2 { margin: 0; }
   .topbar .right { display:flex; gap:8px; align-items:center; }
 
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  /* View mode: multi-column grid */
+  .grid.view-layout{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:12px;
+  }
+
+  /* Edit mode: vertical list (so section drag works up/down) */
+  .grid.edit-layout{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
 
   .card { border:1px solid #ddd; border-radius:12px; padding:12px; background:white; }
   .section-card.dragging { opacity: .5; }
@@ -38,7 +50,7 @@
 
   .btn-primary { border:1px solid #111; background:#111; color:white; }
   .btn-danger { border:1px solid #ff4d4d; background:#ff4d4d; color:white; padding:4px 8px; font-size:12px; border-radius:8px; }
-  .btn-ghost { background:white; }
+  .hint { font-size: 12px; opacity: 0.75; }
 
   /* Links */
   .link-row{
@@ -66,27 +78,19 @@
   }
   .link-title:hover { text-decoration:underline; }
 
-  /* View mode: hide edit controls cleanly */
   .hidden { display:none !important; }
-
-  .hint {
-    font-size: 12px;
-    opacity: 0.75;
-  }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <h2>My Links</h2>
-
   <div class="right">
     <span id="modeHint" class="hint">View mode</span>
     <button id="editBtn" class="btn-primary" onclick="toggleEdit()">Edit</button>
   </div>
 </div>
 
-<!-- Add section row (only enabled in edit mode) -->
 <div class="row">
   <input id="sectionName" placeholder="New section name (e.g., Tools)" />
   <button id="addSectionBtn" onclick="createSection()" disabled>Add Section</button>
@@ -94,46 +98,40 @@
 
 <hr/>
 
-<div id="grid" class="grid"></div>
+<div id="grid" class="grid view-layout"></div>
 
 <script>
   const API = "http://127.0.0.1:8000";
 
-  // GLOBAL MODE
+  // Global mode
   let editMode = false;
 
-  // DIRTY FLAGS (order changes)
+  // Dirty flags (save on Save)
   let dirtySectionsOrder = false;
   const dirtyLinksOrderBySection = new Set();
 
-  // For DnD
+  // DnD state
   let draggedLinkEl = null;
   let draggedSectionCard = null;
 
   function toggleEdit(){
     editMode = !editMode;
 
-    // If switching OFF edit mode, behave like "Save"
+    // If switching OFF edit mode => Save
     if (!editMode) {
-      saveAllOrders().then(() => {
-        // after saving, re-render in view mode
-        load();
-      });
+      saveAllOrders().then(() => load());
     } else {
-      // entering edit mode, just re-render
       load();
     }
   }
 
   async function saveAllOrders(){
-    // Save sections order if dirty
     if (dirtySectionsOrder) {
       const grid = document.getElementById("grid");
       await persistSectionOrder(grid);
       dirtySectionsOrder = false;
     }
 
-    // Save link orders for any dirty sections
     for (const sectionId of dirtyLinksOrderBySection) {
       await persistLinkOrder(sectionId);
     }
@@ -144,15 +142,22 @@
     const hint = document.getElementById("modeHint");
     const btn = document.getElementById("editBtn");
     const addSectionBtn = document.getElementById("addSectionBtn");
+    const grid = document.getElementById("grid");
 
     if (editMode) {
       hint.textContent = "Edit mode";
       btn.textContent = "Save";
       addSectionBtn.disabled = false;
+
+      grid.classList.remove("view-layout");
+      grid.classList.add("edit-layout");
     } else {
       hint.textContent = "View mode";
       btn.textContent = "Edit";
       addSectionBtn.disabled = true;
+
+      grid.classList.remove("edit-layout");
+      grid.classList.add("view-layout");
     }
   }
 
@@ -170,7 +175,7 @@
       card.className = "card section-card";
       card.dataset.sectionId = s.id;
 
-      // Enable section drag only in edit mode
+      // Section draggable only in edit mode
       card.draggable = editMode;
 
       card.innerHTML = `
@@ -179,7 +184,6 @@
             <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
             <h3 style="margin:0;">${escapeHtml(s.name)}</h3>
           </div>
-
           <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
         </div>
 
@@ -196,7 +200,7 @@
 
       grid.appendChild(card);
 
-      // Render links
+      // Links
       const linksDiv = card.querySelector(`#links-${s.id}`);
       linksDiv.innerHTML = "";
 
@@ -206,7 +210,7 @@
         row.dataset.linkId = l.id;
         row.dataset.sectionId = s.id;
 
-        // Enable link drag only in edit mode
+        // Link draggable only in edit mode
         row.draggable = editMode;
 
         row.innerHTML = `
@@ -222,7 +226,7 @@
     });
   }
 
-  // ------- Sections DnD -------
+  // ---------- Sections DnD ----------
   function addSectionDnDHandlers(card, gridEl) {
     card.addEventListener("dragstart", (e) => {
       draggedSectionCard = card;
@@ -233,7 +237,7 @@
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
       draggedSectionCard = null;
-      dirtySectionsOrder = true; // mark dirty, save on "Save"
+      dirtySectionsOrder = true;
     });
 
     card.addEventListener("dragover", (e) => {
@@ -267,7 +271,7 @@
     });
   }
 
-  // ------- Links DnD -------
+  // ---------- Links DnD ----------
   function addLinkDnDHandlers(el) {
     el.addEventListener("dragstart", (e) => {
       draggedLinkEl = el;
@@ -277,17 +281,13 @@
 
     el.addEventListener("dragend", () => {
       el.classList.remove("dragging");
-
-      // mark this section dirty; save later on "Save"
       const sectionId = Number(el.dataset.sectionId);
       dirtyLinksOrderBySection.add(sectionId);
-
       draggedLinkEl = null;
     });
 
     el.addEventListener("dragover", (e) => {
       e.preventDefault();
-
       const container = el.parentElement;
       const after = getLinkAfterElement(container, e.clientY);
       if (!draggedLinkEl) return;
@@ -321,7 +321,7 @@
     });
   }
 
-  // ------- CRUD (only allowed in edit mode) -------
+  // ---------- CRUD ----------
   async function createSection() {
     if (!editMode) return;
 
@@ -361,7 +361,6 @@
 
     document.getElementById(`title-${sectionId}`).value = "";
     document.getElementById(`url-${sectionId}`).value = "";
-
     load();
   }
 
@@ -373,7 +372,7 @@
     load();
   }
 
-  // ------- Helpers -------
+  // ---------- Helpers ----------
   function escapeHtml(str) {
     return String(str)
       .replaceAll("&", "&amp;")
