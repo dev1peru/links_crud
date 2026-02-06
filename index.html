@@ -4,97 +4,386 @@
 <meta charset="utf-8"/>
 <title>Links CRUD</title>
 <style>
-body{font-family:Arial;margin:20px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-.card{border:1px solid #ddd;border-radius:10px;padding:12px}
-.row{display:flex;gap:8px;margin-top:8px}
-input{flex:1;padding:8px}
-button{cursor:pointer}
+  body { font-family: Arial; margin: 20px; }
+  .topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; margin-bottom: 12px;
+  }
+  .topbar h2 { margin: 0; }
+  .topbar .right { display:flex; gap:8px; align-items:center; }
 
-.link-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border:1px solid #eee;border-radius:8px;margin:6px 0;background:white}
-.link-row.dragging{opacity:.5}
-.drag-handle{cursor:grab;user-select:none;font-size:14px;opacity:.7}
-.link-title{flex:1;text-decoration:none}
-.del-btn{padding:2px 6px;font-size:12px;border:none;border-radius:6px;cursor:pointer}
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+
+  .card { border:1px solid #ddd; border-radius:12px; padding:12px; background:white; }
+  .section-card.dragging { opacity: .5; }
+
+  .section-header {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px;
+  }
+  .section-title {
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-handle {
+    cursor: grab;
+    user-select:none;
+    font-size: 14px;
+    opacity: .7;
+  }
+
+  .row { display:flex; gap:8px; margin-top:10px; }
+  input { flex:1; padding:8px; border:1px solid #ddd; border-radius:8px; }
+  button { cursor:pointer; padding:8px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
+  button:disabled { cursor:not-allowed; opacity:.5; }
+
+  .btn-primary { border:1px solid #111; background:#111; color:white; }
+  .btn-danger { border:1px solid #ff4d4d; background:#ff4d4d; color:white; padding:4px 8px; font-size:12px; border-radius:8px; }
+  .btn-ghost { background:white; }
+
+  /* Links */
+  .link-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px;
+    padding:6px 8px;
+    border:1px solid #eee;
+    border-radius:10px;
+    margin:6px 0;
+    background:white;
+  }
+  .link-row.dragging { opacity:.5; }
+
+  .drag-handle{
+    cursor: grab;
+    user-select:none;
+    font-size:14px;
+    opacity:.7;
+  }
+
+  .link-title{
+    flex:1;
+    text-decoration:none;
+    color:#111;
+  }
+  .link-title:hover { text-decoration:underline; }
+
+  /* View mode: hide edit controls cleanly */
+  .hidden { display:none !important; }
+
+  .hint {
+    font-size: 12px;
+    opacity: 0.75;
+  }
 </style>
 </head>
 <body>
-<h2>My Links</h2>
-<div class="row">
-  <input id="sectionName" placeholder="New section name"/>
-  <button onclick="createSection()">Add Section</button>
+
+<div class="topbar">
+  <h2>My Links</h2>
+
+  <div class="right">
+    <span id="modeHint" class="hint">View mode</span>
+    <button id="editBtn" class="btn-primary" onclick="toggleEdit()">Edit</button>
+  </div>
 </div>
+
+<!-- Add section row (only enabled in edit mode) -->
+<div class="row">
+  <input id="sectionName" placeholder="New section name (e.g., Tools)" />
+  <button id="addSectionBtn" onclick="createSection()" disabled>Add Section</button>
+</div>
+
 <hr/>
+
 <div id="grid" class="grid"></div>
 
 <script>
-const API="http://127.0.0.1:8000";
-let draggedEl=null;
+  const API = "http://127.0.0.1:8000";
 
-async function load(){
-  const res=await fetch(`${API}/sections`);
-  const sections=await res.json();
-  const grid=document.getElementById("grid");
-  grid.innerHTML="";
-  sections.forEach(s=>{
-    const div=document.createElement("div");
-    div.className="card";
-    div.innerHTML=`
-      <h3>${s.name} <button onclick="deleteSection(${s.id})">🗑️</button></h3>
-      <div class="row">
-        <input id="title-${s.id}" placeholder="Title"/>
-        <input id="url-${s.id}" placeholder="https://..."/>
-        <button onclick="addLink(${s.id})">Add</button>
-      </div>
-      <div id="links-${s.id}"></div>
-    `;
-    grid.appendChild(div);
-    const linksDiv=div.querySelector(`#links-${s.id}`);
-    s.links.forEach(l=>{
-      const row=document.createElement("div");
-      row.className="link-row";
-      row.draggable=true;
-      row.dataset.linkId=l.id;
-      row.dataset.sectionId=s.id;
-      row.innerHTML=`<span class="drag-handle">☰</span><a href="${l.url}" target="_blank" class="link-title">${l.title}</a><button class="del-btn" onclick="deleteLink(${l.id})">✕</button>`;
-      addDnDHandlers(row);
-      linksDiv.appendChild(row);
+  // GLOBAL MODE
+  let editMode = false;
+
+  // DIRTY FLAGS (order changes)
+  let dirtySectionsOrder = false;
+  const dirtyLinksOrderBySection = new Set();
+
+  // For DnD
+  let draggedLinkEl = null;
+  let draggedSectionCard = null;
+
+  function toggleEdit(){
+    editMode = !editMode;
+
+    // If switching OFF edit mode, behave like "Save"
+    if (!editMode) {
+      saveAllOrders().then(() => {
+        // after saving, re-render in view mode
+        load();
+      });
+    } else {
+      // entering edit mode, just re-render
+      load();
+    }
+  }
+
+  async function saveAllOrders(){
+    // Save sections order if dirty
+    if (dirtySectionsOrder) {
+      const grid = document.getElementById("grid");
+      await persistSectionOrder(grid);
+      dirtySectionsOrder = false;
+    }
+
+    // Save link orders for any dirty sections
+    for (const sectionId of dirtyLinksOrderBySection) {
+      await persistLinkOrder(sectionId);
+    }
+    dirtyLinksOrderBySection.clear();
+  }
+
+  function setTopbar(){
+    const hint = document.getElementById("modeHint");
+    const btn = document.getElementById("editBtn");
+    const addSectionBtn = document.getElementById("addSectionBtn");
+
+    if (editMode) {
+      hint.textContent = "Edit mode";
+      btn.textContent = "Save";
+      addSectionBtn.disabled = false;
+    } else {
+      hint.textContent = "View mode";
+      btn.textContent = "Edit";
+      addSectionBtn.disabled = true;
+    }
+  }
+
+  async function load() {
+    setTopbar();
+
+    const res = await fetch(`${API}/sections`);
+    const sections = await res.json();
+
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+
+    sections.forEach(s => {
+      const card = document.createElement("div");
+      card.className = "card section-card";
+      card.dataset.sectionId = s.id;
+
+      // Enable section drag only in edit mode
+      card.draggable = editMode;
+
+      card.innerHTML = `
+        <div class="section-header">
+          <div class="section-title">
+            <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
+            <h3 style="margin:0;">${escapeHtml(s.name)}</h3>
+          </div>
+
+          <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
+        </div>
+
+        <div class="row ${editMode ? "" : "hidden"}">
+          <input id="title-${s.id}" placeholder="Title" />
+          <input id="url-${s.id}" placeholder="https://..." />
+          <button onclick="addLink(${s.id})">Add</button>
+        </div>
+
+        <div id="links-${s.id}"></div>
+      `;
+
+      if (editMode) addSectionDnDHandlers(card, grid);
+
+      grid.appendChild(card);
+
+      // Render links
+      const linksDiv = card.querySelector(`#links-${s.id}`);
+      linksDiv.innerHTML = "";
+
+      s.links.forEach(l => {
+        const row = document.createElement("div");
+        row.className = "link-row";
+        row.dataset.linkId = l.id;
+        row.dataset.sectionId = s.id;
+
+        // Enable link drag only in edit mode
+        row.draggable = editMode;
+
+        row.innerHTML = `
+          <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
+          <a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>
+          <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
+        `;
+
+        if (editMode) addLinkDnDHandlers(row);
+
+        linksDiv.appendChild(row);
+      });
     });
-  });
-}
+  }
 
-function addDnDHandlers(el){
-  el.addEventListener("dragstart",e=>{draggedEl=el;el.classList.add("dragging")});
-  el.addEventListener("dragend",async()=>{el.classList.remove("dragging");await persistLinkOrder(el.dataset.sectionId);draggedEl=null});
-  el.addEventListener("dragover",e=>{
-    e.preventDefault();
-    const container=el.parentElement;
-    const after=getDragAfter(container,e.clientY);
-    if(after==null)container.appendChild(draggedEl);else container.insertBefore(draggedEl,after);
-  });
-}
+  // ------- Sections DnD -------
+  function addSectionDnDHandlers(card, gridEl) {
+    card.addEventListener("dragstart", (e) => {
+      draggedSectionCard = card;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
 
-function getDragAfter(container,y){
-  const els=[...container.querySelectorAll(".link-row:not(.dragging)")];
-  return els.reduce((closest,child)=>{
-    const box=child.getBoundingClientRect();
-    const offset=y-box.top-box.height/2;
-    if(offset<0&&offset>closest.offset){return{offset,element:child}}else{return closest}
-  },{offset:Number.NEGATIVE_INFINITY}).element;
-}
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      draggedSectionCard = null;
+      dirtySectionsOrder = true; // mark dirty, save on "Save"
+    });
 
-async function persistLinkOrder(sectionId){
-  const container=document.getElementById(`links-${sectionId}`);
-  const ordered=[...container.querySelectorAll(".link-row")].map(x=>Number(x.dataset.linkId));
-  await fetch(`${API}/sections/${sectionId}/links/reorder`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
-}
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!draggedSectionCard) return;
 
-async function createSection(){const name=document.getElementById("sectionName").value.trim();if(!name)return;await fetch(`${API}/sections`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});document.getElementById("sectionName").value="";load();}
-async function deleteSection(id){await fetch(`${API}/sections/${id}`,{method:"DELETE"});load();}
-async function addLink(id){const t=document.getElementById(`title-${id}`).value.trim();const u=document.getElementById(`url-${id}`).value.trim();if(!t||!u)return;await fetch(`${API}/sections/${id}/links`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t,url:u})});load();}
-async function deleteLink(id){await fetch(`${API}/links/${id}`,{method:"DELETE"});load();}
+      const after = getSectionAfterElement(gridEl, e.clientY);
+      if (after == null) gridEl.appendChild(draggedSectionCard);
+      else gridEl.insertBefore(draggedSectionCard, after);
+    });
+  }
 
-load();
+  function getSectionAfterElement(container, y) {
+    const els = [...container.querySelectorAll(".section-card:not(.dragging)")];
+    return els.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+  }
+
+  async function persistSectionOrder(gridEl) {
+    const ordered = [...gridEl.querySelectorAll(".section-card")]
+      .map(x => Number(x.dataset.sectionId));
+
+    await fetch(`${API}/sections/reorder`, {
+      method: "PUT",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ ordered_ids: ordered })
+    });
+  }
+
+  // ------- Links DnD -------
+  function addLinkDnDHandlers(el) {
+    el.addEventListener("dragstart", (e) => {
+      draggedLinkEl = el;
+      el.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    el.addEventListener("dragend", () => {
+      el.classList.remove("dragging");
+
+      // mark this section dirty; save later on "Save"
+      const sectionId = Number(el.dataset.sectionId);
+      dirtyLinksOrderBySection.add(sectionId);
+
+      draggedLinkEl = null;
+    });
+
+    el.addEventListener("dragover", (e) => {
+      e.preventDefault();
+
+      const container = el.parentElement;
+      const after = getLinkAfterElement(container, e.clientY);
+      if (!draggedLinkEl) return;
+
+      if (after == null) container.appendChild(draggedLinkEl);
+      else container.insertBefore(draggedLinkEl, after);
+    });
+  }
+
+  function getLinkAfterElement(container, y) {
+    const els = [...container.querySelectorAll(".link-row:not(.dragging)")];
+    return els.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+  }
+
+  async function persistLinkOrder(sectionId) {
+    const container = document.getElementById(`links-${sectionId}`);
+    if (!container) return;
+
+    const ordered = [...container.querySelectorAll(".link-row")]
+      .map(x => Number(x.dataset.linkId));
+
+    await fetch(`${API}/sections/${sectionId}/links/reorder`, {
+      method: "PUT",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ ordered_ids: ordered })
+    });
+  }
+
+  // ------- CRUD (only allowed in edit mode) -------
+  async function createSection() {
+    if (!editMode) return;
+
+    const name = document.getElementById("sectionName").value.trim();
+    if (!name) return;
+
+    await fetch(`${API}/sections`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ name })
+    });
+
+    document.getElementById("sectionName").value = "";
+    load();
+  }
+
+  async function deleteSection(id) {
+    if (!editMode) return;
+    if (!confirm("Delete this section and all its links?")) return;
+
+    await fetch(`${API}/sections/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  async function addLink(sectionId) {
+    if (!editMode) return;
+
+    const t = document.getElementById(`title-${sectionId}`).value.trim();
+    const u = document.getElementById(`url-${sectionId}`).value.trim();
+    if (!t || !u) return;
+
+    await fetch(`${API}/sections/${sectionId}/links`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ title: t, url: u })
+    });
+
+    document.getElementById(`title-${sectionId}`).value = "";
+    document.getElementById(`url-${sectionId}`).value = "";
+
+    load();
+  }
+
+  async function deleteLink(id) {
+    if (!editMode) return;
+    if (!confirm("Delete this link?")) return;
+
+    await fetch(`${API}/links/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  // ------- Helpers -------
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  load();
 </script>
 </body>
 </html>
