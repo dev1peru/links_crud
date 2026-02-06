@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Links CRUD</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+    .row { display:flex; gap:8px; margin-top:8px; }
+    input { flex:1; padding:8px; }
+    button { padding:8px 10px; cursor:pointer; }
+    a { display:block; margin:6px 0; }
+    .del { margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <h2>My Links</h2>
+
+  <div class="row">
+    <input id="sectionName" placeholder="New section name (e.g., Tools)"/>
+    <button onclick="createSection()">Add Section</button>
+  </div>
+
+  <hr/>
+
+  <div id="grid" class="grid"></div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+
+async function load() {
+  const res = await fetch(`${API}/sections`);
+  const sections = await res.json();
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+
+  sections.forEach(s => {
+    const div = document.createElement("div");
+    div.className = "card";
+
+    div.innerHTML = `
+      <h3>${s.name} <button class="del" onclick="deleteSection(${s.id})">🗑️</button></h3>
+      <div class="row">
+        <input id="title-${s.id}" placeholder="Title"/>
+        <input id="url-${s.id}" placeholder="https://..."/>
+        <button onclick="addLink(${s.id})">Add</button>
+      </div>
+      <div id="links-${s.id}"></div>
+    `;
+
+    grid.appendChild(div);
+
+    const linksDiv = div.querySelector(`#links-${s.id}`);
+    s.links.forEach(l => {
+      const a = document.createElement("div");
+      a.innerHTML = `
+        <a href="${l.url}" target="_blank">${l.title}</a>
+        <button onclick="deleteLink(${l.id})">delete</button>
+      `;
+      linksDiv.appendChild(a);
+    });
+  });
+}
+
+async function createSection() {
+  const name = document.getElementById("sectionName").value.trim();
+  if (!name) return;
+  await fetch(`${API}/sections`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({name})
+  });
+  document.getElementById("sectionName").value = "";
+  load();
+}
+
+async function deleteSection(id) {
+  await fetch(`${API}/sections/${id}`, { method: "DELETE" });
+  load();
+}
+
+async function addLink(sectionId) {
+  const title = document.getElementById(`title-${sectionId}`).value.trim();
+  const url = document.getElementById(`url-${sectionId}`).value.trim();
+  if (!title || !url) return;
+
+  await fetch(`${API}/sections/${sectionId}/links`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({title, url})
+  });
+
+  document.getElementById(`title-${sectionId}`).value = "";
+  document.getElementById(`url-${sectionId}`).value = "";
+  load();
+}
+
+async function deleteLink(id) {
+  await fetch(`${API}/links/${id}`, { method: "DELETE" });
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
