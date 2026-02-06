@@ -4,38 +4,54 @@
 <meta charset="utf-8"/>
 <title>Links CRUD</title>
 <style>
-  body { font-family: Arial; margin: 20px; }
+  body { font-family: Arial; margin: 20px; background:#f7f7f7; }
+
   .topbar {
     display:flex; align-items:center; justify-content:space-between;
     gap:12px; margin-bottom: 12px;
   }
+
   .topbar h2 { margin: 0; }
   .topbar .right { display:flex; gap:8px; align-items:center; }
 
-  /* View mode: multi-column grid */
+  /* VIEW MODE (grid layout) */
   .grid.view-layout{
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
     gap:12px;
   }
 
-  /* Edit mode: vertical list (so section drag works up/down) */
+  /* EDIT MODE (vertical centered list) */
   .grid.edit-layout{
     display:flex;
     flex-direction:column;
     gap:12px;
+    align-items:center;
   }
 
-  .card { border:1px solid #ddd; border-radius:12px; padding:12px; background:white; }
+  .card {
+    border:1px solid #ddd;
+    border-radius:12px;
+    padding:12px;
+    background:white;
+  }
+
+  .grid.edit-layout .section-card{
+    width:100%;
+    max-width:1100px;
+  }
+
   .section-card.dragging { opacity: .5; }
 
   .section-header {
     display:flex; align-items:center; justify-content:space-between;
     gap:10px;
   }
+
   .section-title {
     display:flex; align-items:center; gap:8px;
   }
+
   .section-handle {
     cursor: grab;
     user-select:none;
@@ -43,8 +59,8 @@
     opacity: .7;
   }
 
-  .row { display:flex; gap:8px; margin-top:10px; }
-  input { flex:1; padding:8px; border:1px solid #ddd; border-radius:8px; }
+  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  input { flex:1; min-width:240px; padding:8px; border:1px solid #ddd; border-radius:8px; }
   button { cursor:pointer; padding:8px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
   button:disabled { cursor:not-allowed; opacity:.5; }
 
@@ -52,16 +68,16 @@
   .btn-danger { border:1px solid #ff4d4d; background:#ff4d4d; color:white; padding:4px 8px; font-size:12px; border-radius:8px; }
   .hint { font-size: 12px; opacity: 0.75; }
 
-  /* Links */
+  /* LINKS */
   .link-row{
-    display:flex; align-items:center; justify-content:space-between;
-    gap:10px;
+    display:flex; align-items:center; gap:10px;
     padding:6px 8px;
     border:1px solid #eee;
     border-radius:10px;
     margin:6px 0;
     background:white;
   }
+
   .link-row.dragging { opacity:.5; }
 
   .drag-handle{
@@ -76,8 +92,8 @@
     text-decoration:none;
     color:#111;
   }
-  .link-title:hover { text-decoration:underline; }
 
+  .link-title:hover { text-decoration:underline; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -101,288 +117,161 @@
 <div id="grid" class="grid view-layout"></div>
 
 <script>
-  const API = "http://127.0.0.1:8000";
+const API = "";
+let editMode = false;
+let dirtySectionsOrder = false;
+const dirtyLinksOrderBySection = new Set();
+let draggedLinkEl = null;
+let draggedSectionCard = null;
 
-  // Global mode
-  let editMode = false;
-
-  // Dirty flags (save on Save)
-  let dirtySectionsOrder = false;
-  const dirtyLinksOrderBySection = new Set();
-
-  // DnD state
-  let draggedLinkEl = null;
-  let draggedSectionCard = null;
-
-  function toggleEdit(){
-    editMode = !editMode;
-
-    // If switching OFF edit mode => Save
-    if (!editMode) {
-      saveAllOrders().then(() => load());
-    } else {
-      load();
-    }
+function toggleEdit(){
+  editMode = !editMode;
+  if (!editMode) {
+    saveAllOrders().then(() => load());
+  } else {
+    load();
   }
+}
 
-  async function saveAllOrders(){
-    if (dirtySectionsOrder) {
-      const grid = document.getElementById("grid");
-      await persistSectionOrder(grid);
-      dirtySectionsOrder = false;
-    }
-
-    for (const sectionId of dirtyLinksOrderBySection) {
-      await persistLinkOrder(sectionId);
-    }
-    dirtyLinksOrderBySection.clear();
-  }
-
-  function setTopbar(){
-    const hint = document.getElementById("modeHint");
-    const btn = document.getElementById("editBtn");
-    const addSectionBtn = document.getElementById("addSectionBtn");
+async function saveAllOrders(){
+  if (dirtySectionsOrder) {
     const grid = document.getElementById("grid");
-
-    if (editMode) {
-      hint.textContent = "Edit mode";
-      btn.textContent = "Save";
-      addSectionBtn.disabled = false;
-
-      grid.classList.remove("view-layout");
-      grid.classList.add("edit-layout");
-    } else {
-      hint.textContent = "View mode";
-      btn.textContent = "Edit";
-      addSectionBtn.disabled = true;
-
-      grid.classList.remove("edit-layout");
-      grid.classList.add("view-layout");
-    }
+    await persistSectionOrder(grid);
+    dirtySectionsOrder = false;
   }
+  for (const sectionId of dirtyLinksOrderBySection) {
+    await persistLinkOrder(sectionId);
+  }
+  dirtyLinksOrderBySection.clear();
+}
 
-  async function load() {
-    setTopbar();
+function setTopbar(){
+  const hint = document.getElementById("modeHint");
+  const btn = document.getElementById("editBtn");
+  const addSectionBtn = document.getElementById("addSectionBtn");
+  const grid = document.getElementById("grid");
 
-    const res = await fetch(`${API}/sections`);
-    const sections = await res.json();
+  if (editMode) {
+    hint.textContent = "Edit mode";
+    btn.textContent = "Save";
+    addSectionBtn.disabled = false;
+    grid.classList.remove("view-layout");
+    grid.classList.add("edit-layout");
+  } else {
+    hint.textContent = "View mode";
+    btn.textContent = "Edit";
+    addSectionBtn.disabled = true;
+    grid.classList.remove("edit-layout");
+    grid.classList.add("view-layout");
+  }
+}
 
-    const grid = document.getElementById("grid");
-    grid.innerHTML = "";
+async function load(){
+  setTopbar();
+  const res = await fetch(`/sections`);
+  const sections = await res.json();
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
 
-    sections.forEach(s => {
-      const card = document.createElement("div");
-      card.className = "card section-card";
-      card.dataset.sectionId = s.id;
+  sections.forEach(s => {
+    const card = document.createElement("div");
+    card.className = "card section-card";
+    card.dataset.sectionId = s.id;
+    card.draggable = editMode;
 
-      // Section draggable only in edit mode
-      card.draggable = editMode;
-
-      card.innerHTML = `
-        <div class="section-header">
-          <div class="section-title">
-            <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
-            <h3 style="margin:0;">${escapeHtml(s.name)}</h3>
-          </div>
-          <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
+    card.innerHTML = `
+      <div class="section-header">
+        <div class="section-title">
+          <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
+          <h3 style="margin:0;">${escapeHtml(s.name)}</h3>
         </div>
+        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
+      </div>
 
-        <div class="row ${editMode ? "" : "hidden"}">
-          <input id="title-${s.id}" placeholder="Title" />
-          <input id="url-${s.id}" placeholder="https://..." />
-          <button onclick="addLink(${s.id})">Add</button>
-        </div>
+      <div class="row ${editMode ? "" : "hidden"}">
+        <input id="title-${s.id}" placeholder="Title"/>
+        <input id="url-${s.id}" placeholder="https://..."/>
+        <button onclick="addLink(${s.id})">Add</button>
+      </div>
 
-        <div id="links-${s.id}"></div>
+      <div id="links-${s.id}"></div>
+    `;
+
+    if (editMode) addSectionDnDHandlers(card, grid);
+    grid.appendChild(card);
+
+    const linksDiv = card.querySelector(`#links-${s.id}`);
+    s.links.forEach(l => {
+      const row = document.createElement("div");
+      row.className = "link-row";
+      row.dataset.linkId = l.id;
+      row.dataset.sectionId = s.id;
+      row.draggable = editMode;
+
+      row.innerHTML = `
+        <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
+        <a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>
+        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
       `;
-
-      if (editMode) addSectionDnDHandlers(card, grid);
-
-      grid.appendChild(card);
-
-      // Links
-      const linksDiv = card.querySelector(`#links-${s.id}`);
-      linksDiv.innerHTML = "";
-
-      s.links.forEach(l => {
-        const row = document.createElement("div");
-        row.className = "link-row";
-        row.dataset.linkId = l.id;
-        row.dataset.sectionId = s.id;
-
-        // Link draggable only in edit mode
-        row.draggable = editMode;
-
-        row.innerHTML = `
-          <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
-          <a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>
-          <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
-        `;
-
-        if (editMode) addLinkDnDHandlers(row);
-
-        linksDiv.appendChild(row);
-      });
+      if (editMode) addLinkDnDHandlers(row);
+      linksDiv.appendChild(row);
     });
-  }
+  });
+}
 
-  // ---------- Sections DnD ----------
-  function addSectionDnDHandlers(card, gridEl) {
-    card.addEventListener("dragstart", (e) => {
-      draggedSectionCard = card;
-      card.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-    });
+function addSectionDnDHandlers(card, grid){
+  card.addEventListener("dragstart", e => { draggedSectionCard = card; card.classList.add("dragging"); });
+  card.addEventListener("dragend", () => { card.classList.remove("dragging"); dirtySectionsOrder = true; });
+  card.addEventListener("dragover", e => {
+    e.preventDefault();
+    const after = [...grid.querySelectorAll(".section-card:not(.dragging)")].find(el => e.clientY < el.getBoundingClientRect().top + el.offsetHeight/2);
+    if (after) grid.insertBefore(draggedSectionCard, after); else grid.appendChild(draggedSectionCard);
+  });
+}
 
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      draggedSectionCard = null;
-      dirtySectionsOrder = true;
-    });
+async function persistSectionOrder(grid){
+  const ordered = [...grid.querySelectorAll(".section-card")].map(x => Number(x.dataset.sectionId));
+  await fetch(`/sections/reorder`, {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+}
 
-    card.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      if (!draggedSectionCard) return;
+function addLinkDnDHandlers(el){
+  el.addEventListener("dragstart", ()=>{ draggedLinkEl = el; el.classList.add("dragging"); });
+  el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dirtyLinksOrderBySection.add(Number(el.dataset.sectionId)); });
+  el.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const container = el.parentElement;
+    const after = [...container.querySelectorAll(".link-row:not(.dragging)")].find(child => e.clientY < child.getBoundingClientRect().top + child.offsetHeight/2);
+    if (after) container.insertBefore(draggedLinkEl, after); else container.appendChild(draggedLinkEl);
+  });
+}
 
-      const after = getSectionAfterElement(gridEl, e.clientY);
-      if (after == null) gridEl.appendChild(draggedSectionCard);
-      else gridEl.insertBefore(draggedSectionCard, after);
-    });
-  }
+async function persistLinkOrder(sectionId){
+  const container = document.getElementById(`links-${sectionId}`);
+  const ordered = [...container.querySelectorAll(".link-row")].map(x => Number(x.dataset.linkId));
+  await fetch(`/sections/${sectionId}/links/reorder`, {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ordered_ids:ordered})});
+}
 
-  function getSectionAfterElement(container, y) {
-    const els = [...container.querySelectorAll(".section-card:not(.dragging)")];
-    return els.reduce((closest, child) => {
-      const box = child.getBoundingClientRect();
-      const offset = y - box.top - box.height / 2;
-      if (offset < 0 && offset > closest.offset) return { offset, element: child };
-      return closest;
-    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
-  }
-
-  async function persistSectionOrder(gridEl) {
-    const ordered = [...gridEl.querySelectorAll(".section-card")]
-      .map(x => Number(x.dataset.sectionId));
-
-    await fetch(`${API}/sections/reorder`, {
-      method: "PUT",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ ordered_ids: ordered })
-    });
-  }
-
-  // ---------- Links DnD ----------
-  function addLinkDnDHandlers(el) {
-    el.addEventListener("dragstart", (e) => {
-      draggedLinkEl = el;
-      el.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-    });
-
-    el.addEventListener("dragend", () => {
-      el.classList.remove("dragging");
-      const sectionId = Number(el.dataset.sectionId);
-      dirtyLinksOrderBySection.add(sectionId);
-      draggedLinkEl = null;
-    });
-
-    el.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      const container = el.parentElement;
-      const after = getLinkAfterElement(container, e.clientY);
-      if (!draggedLinkEl) return;
-
-      if (after == null) container.appendChild(draggedLinkEl);
-      else container.insertBefore(draggedLinkEl, after);
-    });
-  }
-
-  function getLinkAfterElement(container, y) {
-    const els = [...container.querySelectorAll(".link-row:not(.dragging)")];
-    return els.reduce((closest, child) => {
-      const box = child.getBoundingClientRect();
-      const offset = y - box.top - box.height / 2;
-      if (offset < 0 && offset > closest.offset) return { offset, element: child };
-      return closest;
-    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
-  }
-
-  async function persistLinkOrder(sectionId) {
-    const container = document.getElementById(`links-${sectionId}`);
-    if (!container) return;
-
-    const ordered = [...container.querySelectorAll(".link-row")]
-      .map(x => Number(x.dataset.linkId));
-
-    await fetch(`${API}/sections/${sectionId}/links/reorder`, {
-      method: "PUT",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ ordered_ids: ordered })
-    });
-  }
-
-  // ---------- CRUD ----------
-  async function createSection() {
-    if (!editMode) return;
-
-    const name = document.getElementById("sectionName").value.trim();
-    if (!name) return;
-
-    await fetch(`${API}/sections`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ name })
-    });
-
-    document.getElementById("sectionName").value = "";
-    load();
-  }
-
-  async function deleteSection(id) {
-    if (!editMode) return;
-    if (!confirm("Delete this section and all its links?")) return;
-
-    await fetch(`${API}/sections/${id}`, { method: "DELETE" });
-    load();
-  }
-
-  async function addLink(sectionId) {
-    if (!editMode) return;
-
-    const t = document.getElementById(`title-${sectionId}`).value.trim();
-    const u = document.getElementById(`url-${sectionId}`).value.trim();
-    if (!t || !u) return;
-
-    await fetch(`${API}/sections/${sectionId}/links`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ title: t, url: u })
-    });
-
-    document.getElementById(`title-${sectionId}`).value = "";
-    document.getElementById(`url-${sectionId}`).value = "";
-    load();
-  }
-
-  async function deleteLink(id) {
-    if (!editMode) return;
-    if (!confirm("Delete this link?")) return;
-
-    await fetch(`${API}/links/${id}`, { method: "DELETE" });
-    load();
-  }
-
-  // ---------- Helpers ----------
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
+async function createSection(){
+  const name = sectionName.value.trim();
+  if (!name) return;
+  await fetch(`/sections`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+  sectionName.value = "";
   load();
+}
+
+async function deleteSection(id){ if(confirm("Delete section?")){ await fetch(`/sections/${id}`,{method:"DELETE"}); load(); } }
+async function addLink(sid){
+  const t=document.getElementById(`title-${sid}`).value.trim();
+  const u=document.getElementById(`url-${sid}`).value.trim();
+  if(!t||!u) return;
+  await fetch(`/sections/${sid}/links`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t,url:u})});
+  load();
+}
+async function deleteLink(id){ if(confirm("Delete link?")){ await fetch(`/links/${id}`,{method:"DELETE"}); load(); } }
+
+function escapeHtml(str){return String(str).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
+
+load();
 </script>
 </body>
 </html>
