@@ -173,7 +173,9 @@ async function load(){
     const card = document.createElement("div");
     card.className = "card section-card";
     card.dataset.sectionId = s.id;
-    card.draggable = editMode;
+
+    // IMPORTANT: only draggable in edit mode
+    card.draggable = !!editMode;
 
     const color = (s.color || "slate").toLowerCase();
 
@@ -221,7 +223,7 @@ async function load(){
       row.className = "link-row";
       row.dataset.linkId = l.id;
       row.dataset.sectionId = s.id;
-      row.draggable = editMode;
+      row.draggable = !!editMode;
 
       const linkView = `<a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>`;
 
@@ -391,12 +393,20 @@ async function deleteLink(id){
 function addSectionDnDHandlers(card){
   const grid = document.getElementById("grid");
 
-  card.addEventListener("dragstart", () => {
+  card.addEventListener("dragstart", (e) => {
+    // prevent dragging from inputs/selects/buttons (it’s annoying)
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "select" || tag === "button") {
+      e.preventDefault();
+      return;
+    }
+
     draggedSectionCard = card;
     card.classList.add("dragging");
   });
 
   card.addEventListener("dragend", () => {
+    if (!draggedSectionCard) return;
     card.classList.remove("dragging");
     draggedSectionCard = null;
     dirtySectionsOrder = true;
@@ -414,14 +424,21 @@ function addSectionDnDHandlers(card){
   });
 }
 
+/* ✅ FIXED: filter invalid IDs so it never sends NaN to FastAPI */
 async function persistSectionOrder(){
   const ordered = [...document.querySelectorAll(".section-card")]
-    .map(x => Number(x.dataset.sectionId));
+    .map(x => parseInt(x.dataset.sectionId || "", 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+
+  if (ordered.length === 0) {
+    console.warn("persistSectionOrder(): no valid section ids found");
+    return;
+  }
 
   const r = await fetch(`/sections/reorder`, {
     method:"PUT",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ordered_ids: ordered})
+    body:JSON.stringify({ ordered_ids: ordered })
   });
 
   if (!r.ok){
@@ -439,9 +456,17 @@ function addLinkDnDHandlers(el){
     el.classList.add("dragging");
   });
 
+  /* ✅ FIXED: avoid NaN section id */
   el.addEventListener("dragend", () => {
     el.classList.remove("dragging");
-    dirtyLinksOrderBySection.add(Number(el.dataset.sectionId));
+
+    const sid = parseInt(el.dataset.sectionId || "", 10);
+    if (Number.isFinite(sid) && sid > 0) {
+      dirtyLinksOrderBySection.add(sid);
+    } else {
+      console.warn("Missing sectionId on dragged link row", el);
+    }
+
     draggedLinkEl = null;
   });
 
@@ -459,17 +484,22 @@ function addLinkDnDHandlers(el){
   });
 }
 
+/* ✅ FIXED: sanitize sid + link ids so it never calls /sections/NaN/... */
 async function persistLinkOrder(sectionId){
-  const container = document.getElementById(`links-${sectionId}`);
+  const sid = parseInt(String(sectionId), 10);
+  if (!Number.isFinite(sid) || sid <= 0) return;
+
+  const container = document.getElementById(`links-${sid}`);
   if (!container) return;
 
   const ordered = [...container.querySelectorAll(".link-row")]
-    .map(x => Number(x.dataset.linkId));
+    .map(x => parseInt(x.dataset.linkId || "", 10))
+    .filter(n => Number.isFinite(n) && n > 0);
 
-  const r = await fetch(`/sections/${sectionId}/links/reorder`, {
+  const r = await fetch(`/sections/${sid}/links/reorder`, {
     method:"PUT",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ordered_ids: ordered})
+    body:JSON.stringify({ ordered_ids: ordered })
   });
 
   if (!r.ok){
