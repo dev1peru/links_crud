@@ -91,9 +91,6 @@
 <script>
 let editMode = false;
 
-// If reorder endpoints are not present, we won’t call them.
-let backendSupportsReorder = null;
-
 let draggedSectionCard = null;
 let draggedLinkEl = null;
 
@@ -107,19 +104,6 @@ const COLORS = [
   { value:"pink", label:"Pink" },
   { value:"teal", label:"Teal" },
 ];
-
-async function detectReorderSupport(){
-  // Try calling a reorder endpoint with empty payload; if 404, we disable reorder persistence.
-  try{
-    const r = await fetch("/sections/reorder", {
-      method:"OPTIONS"
-    });
-    // Many servers will 405 or 200; if 404 then doesn’t exist.
-    backendSupportsReorder = (r.status !== 404);
-  }catch{
-    backendSupportsReorder = false;
-  }
-}
 
 function toggleEdit(){
   editMode = !editMode;
@@ -150,8 +134,12 @@ function colorOptionsHtml(selected){
   return COLORS.map(c => `<option value="${c.value}" ${c.value===s?"selected":""}>${c.label}</option>`).join("");
 }
 
+function safeInt(x){
+  const n = parseInt(String(x ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 async function load(){
-  if (backendSupportsReorder === null) await detectReorderSupport();
   setTopbar();
 
   const res = await fetch("/sections");
@@ -321,6 +309,47 @@ async function deleteLink(id){
   load();
 }
 
+/* -------- Reorder helpers -------- */
+function getSectionOrder(){
+  return [...document.querySelectorAll(".section-card")]
+    .map(el => safeInt(el.dataset.sectionId))
+    .filter(n => n !== null);
+}
+
+function getLinkOrder(sectionId){
+  const container = document.getElementById(`links-${sectionId}`);
+  if (!container) return [];
+  return [...container.querySelectorAll(".link-row")]
+    .map(el => safeInt(el.dataset.linkId))
+    .filter(n => n !== null);
+}
+
+async function saveSectionOrder(){
+  const ordered = getSectionOrder();
+  if (!ordered.length) return;
+
+  const r = await fetch(`/sections/reorder`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ ordered_ids: ordered })
+  });
+
+  if (!r.ok) alert(`Section reorder failed: ${await r.text()}`);
+}
+
+async function saveLinkOrder(sectionId){
+  const ordered = getLinkOrder(sectionId);
+  if (!ordered.length) return;
+
+  const r = await fetch(`/sections/${sectionId}/links/reorder`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ ordered_ids: ordered })
+  });
+
+  if (!r.ok) alert(`Link reorder failed: ${await r.text()}`);
+}
+
 /* -------- DnD Sections -------- */
 function addSectionDnDHandlers(card){
   const grid = document.getElementById("grid");
@@ -339,22 +368,7 @@ function addSectionDnDHandlers(card){
   handle.addEventListener("dragend", async () => {
     card.classList.remove("dragging");
     draggedSectionCard = null;
-
-    if (!backendSupportsReorder) return;
-
-    const ordered = [...document.querySelectorAll(".section-card")]
-      .map(x => parseInt(x.dataset.sectionId || "", 10))
-      .filter(n => Number.isFinite(n) && n > 0);
-
-    if (!ordered.length) return;
-
-    const r = await fetch(`/sections/reorder`, {
-      method:"PUT",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ ordered_ids: ordered })
-    });
-
-    if (!r.ok) alert(`Section reorder failed: ${await r.text()}`);
+    await saveSectionOrder();
   });
 
   card.addEventListener("dragover", (e) => {
@@ -386,26 +400,10 @@ function addLinkDnDHandlers(row){
   handle.addEventListener("dragend", async () => {
     row.classList.remove("dragging");
     const secCard = row.closest(".section-card");
-    const sid = parseInt(secCard?.dataset.sectionId || "", 10);
+    const sid = safeInt(secCard?.dataset.sectionId);
     draggedLinkEl = null;
-
-    if (!backendSupportsReorder) return;
-    if (!Number.isFinite(sid) || sid <= 0) return;
-
-    const container = document.getElementById(`links-${sid}`);
-    if (!container) return;
-
-    const ordered = [...container.querySelectorAll(".link-row")]
-      .map(x => parseInt(x.dataset.linkId || "", 10))
-      .filter(n => Number.isFinite(n) && n > 0);
-
-    const r = await fetch(`/sections/${sid}/links/reorder`, {
-      method:"PUT",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ ordered_ids: ordered })
-    });
-
-    if (!r.ok) alert(`Link reorder failed: ${await r.text()}`);
+    if (!sid) return;
+    await saveLinkOrder(sid);
   });
 
   row.addEventListener("dragover", (e) => {
