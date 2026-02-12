@@ -34,11 +34,16 @@
     background:white;
   }
   .grid.edit-layout .section-card{ width:100%; max-width:1100px; }
-  .section-card.dragging { opacity:.5; }
+  .section-card.dragging { opacity:.45; }
 
   .section-header { display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .section-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
-  .section-handle, .drag-handle { cursor:grab; user-select:none; opacity:.7; font-size:14px; }
+
+  .section-handle, .drag-handle {
+    cursor:grab; user-select:none; opacity:.75; font-size:14px;
+    padding:4px 6px; border-radius:8px; border:1px solid #eee; background:#fafafa;
+  }
+  .section-handle:active, .drag-handle:active { cursor:grabbing; }
 
   .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   input, select {
@@ -66,7 +71,7 @@
 
   .hidden { display:none !important; }
 
-  /* Section color styling (subtle top border) */
+  /* Section color styling */
   .section-color-bar { height:6px; border-radius:10px; margin:-12px -12px 10px -12px; }
   .c-slate { background:#64748b; }
   .c-blue { background:#3b82f6; }
@@ -103,8 +108,9 @@
 let editMode = false;
 let dirtySectionsOrder = false;
 const dirtyLinksOrderBySection = new Set();
-let draggedLinkEl = null;
+
 let draggedSectionCard = null;
+let draggedLinkEl = null;
 
 const COLORS = [
   { value:"slate", label:"Slate" },
@@ -120,7 +126,7 @@ const COLORS = [
 function toggleEdit(){
   editMode = !editMode;
   if (!editMode) {
-    saveAllOrders().then(() => load());
+    saveAllOrders().then(load);
   } else {
     load();
   }
@@ -131,7 +137,10 @@ async function saveAllOrders(){
     await persistSectionOrder();
     dirtySectionsOrder = false;
   }
-  for (const sid of dirtyLinksOrderBySection) {
+
+  // Copy set -> array to avoid mutation issues
+  const sids = Array.from(dirtyLinksOrderBySection);
+  for (const sid of sids) {
     await persistLinkOrder(sid);
   }
   dirtyLinksOrderBySection.clear();
@@ -172,10 +181,10 @@ async function load(){
   sections.forEach(s => {
     const card = document.createElement("div");
     card.className = "card section-card";
-    card.dataset.sectionId = s.id;
+    card.dataset.sectionId = String(s.id);
 
-    // IMPORTANT: only draggable in edit mode
-    card.draggable = !!editMode;
+    // IMPORTANT: we don't drag the whole card; only the handle is draggable.
+    card.draggable = false;
 
     const color = (s.color || "slate").toLowerCase();
 
@@ -198,7 +207,7 @@ async function load(){
 
       <div class="section-header">
         <div class="section-left">
-          <span class="section-handle ${editMode ? "" : "hidden"}">☰</span>
+          <span class="section-handle ${editMode ? "" : "hidden"}" title="Drag section">☰</span>
           ${titleBlock}
         </div>
         <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
@@ -221,9 +230,8 @@ async function load(){
     s.links.forEach(l => {
       const row = document.createElement("div");
       row.className = "link-row";
-      row.dataset.linkId = l.id;
-      row.dataset.sectionId = s.id;
-      row.draggable = !!editMode;
+      row.dataset.linkId = String(l.id);
+      row.draggable = false; // drag only from handle
 
       const linkView = `<a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>`;
 
@@ -234,7 +242,7 @@ async function load(){
       `;
 
       row.innerHTML = `
-        <span class="drag-handle ${editMode ? "" : "hidden"}">☰</span>
+        <span class="drag-handle ${editMode ? "" : "hidden"}" title="Drag link">☰</span>
         ${editMode ? linkEdit : linkView}
         <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
       `;
@@ -250,7 +258,6 @@ async function load(){
 ------------------------- */
 async function createSection(){
   if (!editMode) return;
-
   const input = document.getElementById("sectionName");
   const name = input.value.trim();
   if (!name) return;
@@ -266,7 +273,6 @@ async function createSection(){
     alert(`Add section failed (${r.status}): ${txt}`);
     return;
   }
-
   input.value = "";
   load();
 }
@@ -324,7 +330,7 @@ async function deleteSection(id){
 }
 
 /* -------------------------
-   Links CRUD (Create + Edit)
+   Links CRUD
 ------------------------- */
 async function addLink(sid){
   if (!editMode) return;
@@ -388,24 +394,24 @@ async function deleteLink(id){
 }
 
 /* -------------------------
-   DnD: Sections (vertical)
+   DnD: Sections (ONLY via handle)
 ------------------------- */
 function addSectionDnDHandlers(card){
   const grid = document.getElementById("grid");
+  const handle = card.querySelector(".section-handle");
+  if (!handle) return;
 
-  card.addEventListener("dragstart", (e) => {
-    // prevent dragging from inputs/selects/buttons (it’s annoying)
-    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
-    if (tag === "input" || tag === "select" || tag === "button") {
-      e.preventDefault();
-      return;
-    }
+  handle.draggable = true;
 
+  handle.addEventListener("dragstart", (e) => {
     draggedSectionCard = card;
     card.classList.add("dragging");
+    // needed for some browsers
+    e.dataTransfer.setData("text/plain", card.dataset.sectionId || "");
+    e.dataTransfer.effectAllowed = "move";
   });
 
-  card.addEventListener("dragend", () => {
+  handle.addEventListener("dragend", () => {
     if (!draggedSectionCard) return;
     card.classList.remove("dragging");
     draggedSectionCard = null;
@@ -424,7 +430,6 @@ function addSectionDnDHandlers(card){
   });
 }
 
-/* ✅ FIXED: filter invalid IDs so it never sends NaN to FastAPI */
 async function persistSectionOrder(){
   const ordered = [...document.querySelectorAll(".section-card")]
     .map(x => parseInt(x.dataset.sectionId || "", 10))
@@ -443,48 +448,56 @@ async function persistSectionOrder(){
 
   if (!r.ok){
     const txt = await r.text();
-    alert(`Save section order failed (${r.status}): ${txt}`);
+    alert(`Section reorder failed (${r.status}): ${txt}`);
   }
 }
 
 /* -------------------------
-   DnD: Links
+   DnD: Links (ONLY via handle)
 ------------------------- */
-function addLinkDnDHandlers(el){
-  el.addEventListener("dragstart", () => {
-    draggedLinkEl = el;
-    el.classList.add("dragging");
+function addLinkDnDHandlers(row){
+  const handle = row.querySelector(".drag-handle");
+  if (!handle) return;
+
+  handle.draggable = true;
+
+  handle.addEventListener("dragstart", (e) => {
+    draggedLinkEl = row;
+    row.classList.add("dragging");
+    e.dataTransfer.setData("text/plain", row.dataset.linkId || "");
+    e.dataTransfer.effectAllowed = "move";
   });
 
-  /* ✅ FIXED: avoid NaN section id */
-  el.addEventListener("dragend", () => {
-    el.classList.remove("dragging");
+  handle.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
 
-    const sid = parseInt(el.dataset.sectionId || "", 10);
+    // ✅ ALWAYS derive sectionId from DOM (never from row.dataset)
+    const secCard = row.closest(".section-card");
+    const sid = parseInt(secCard?.dataset.sectionId || "", 10);
+
     if (Number.isFinite(sid) && sid > 0) {
       dirtyLinksOrderBySection.add(sid);
     } else {
-      console.warn("Missing sectionId on dragged link row", el);
+      console.warn("Could not resolve section id for link reorder", row);
     }
 
     draggedLinkEl = null;
   });
 
-  el.addEventListener("dragover", (e) => {
+  row.addEventListener("dragover", (e) => {
     e.preventDefault();
-    const container = el.parentElement;
+    if (!draggedLinkEl) return;
+
+    const container = row.parentElement;
 
     const after = [...container.querySelectorAll(".link-row:not(.dragging)")]
       .find(child => e.clientY < child.getBoundingClientRect().top + child.offsetHeight / 2);
-
-    if (!draggedLinkEl) return;
 
     if (after) container.insertBefore(draggedLinkEl, after);
     else container.appendChild(draggedLinkEl);
   });
 }
 
-/* ✅ FIXED: sanitize sid + link ids so it never calls /sections/NaN/... */
 async function persistLinkOrder(sectionId){
   const sid = parseInt(String(sectionId), 10);
   if (!Number.isFinite(sid) || sid <= 0) return;
@@ -504,7 +517,7 @@ async function persistLinkOrder(sectionId){
 
   if (!r.ok){
     const txt = await r.text();
-    alert(`Save link order failed (${r.status}): ${txt}`);
+    alert(`Link reorder failed (${r.status}): ${txt}`);
   }
 }
 
