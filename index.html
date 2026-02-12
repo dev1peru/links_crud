@@ -1,282 +1,765 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Links CRUD</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Links CRUD</title>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <!-- SortableJS (drag & drop) -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
-<style>
-:root{
-  --bg:#f6f7fb;
-  --card:#ffffff;
-  --text:#121826;
-  --muted:#667085;
-  --line:#e6e8ef;
-  --btn:#111827;
-  --btnText:#fff;
-  --danger:#e11d48;
-}
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#121826;
+      --muted:#667085;
+      --line:#e6e8ef;
+      --btn:#111827;
+      --btnText:#fff;
+      --danger:#e11d48;
 
-*{box-sizing:border-box}
+      /* Typography + density (global theme) */
+      --fontFamily: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      --titleSize: 24px;
+      --subSize: 12px;
+      --sectionTitleSize: 14px;
+      --linkSize: 13px;
 
-body{
-  margin:0;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-  background:var(--bg);
-  color:var(--text);
-}
+      --padPageX: 22px;
+      --cardPad: 12px;
+      --cardGap: 14px;
+      --linkPadY: 8px;
+      --linkPadX: 10px;
+    }
 
-/* LINKS CLEAN */
-a{
-  color:inherit;
-  text-decoration:none;
-}
-a:hover{
-  text-decoration:underline;
-}
+    *{ box-sizing:border-box; }
 
-/* HEADER FULL WIDTH */
-header{
-  padding:18px 22px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  width:100%;
-}
+    body{
+      margin:0;
+      font-family: var(--fontFamily);
+      background:var(--bg);
+      color:var(--text);
+    }
 
-h1{
-  margin:0;
-  font-size:22px;
-}
+    /* Compact mode */
+    body.compact{
+      --padPageX: 16px;
+      --cardPad: 10px;
+      --cardGap: 12px;
+      --linkPadY: 6px;
+      --linkPadX: 8px;
+      --sectionTitleSize: 13px;
+      --linkSize: 12px;
+    }
 
-.topbar{
-  display:flex;
-  gap:10px;
-}
+    /* Links */
+    a{ color:inherit; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
 
-.btn{
-  border:0;
-  background:var(--btn);
-  color:var(--btnText);
-  padding:8px 12px;
-  border-radius:10px;
-  cursor:pointer;
-  font-weight:600;
-  font-size:13px;
-}
+    /* Header FULL width (like your screenshot) */
+    header{
+      padding:18px var(--padPageX);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      width:100%;
+      gap:12px;
+    }
+    .header-left{ display:flex; flex-direction:column; gap:4px; }
+    h1{
+      margin:0;
+      font-size: var(--titleSize);
+      letter-spacing: -0.3px;
+    }
+    .muted{ color:var(--muted); font-size:var(--subSize); }
 
-.btn.secondary{
-  background:#fff;
-  color:#111827;
-  border:1px solid var(--line);
-}
+    .topbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
 
-.wrap{
-  padding:0 22px 28px;
-  width:100%;
-}
+    .btn{
+      border:0;
+      background:var(--btn);
+      color:var(--btnText);
+      padding:8px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:650;
+      font-size:13px;
+      line-height:1;
+      box-shadow: 0 1px 0 rgba(16,24,40,.05);
+    }
+    .btn.secondary{
+      background:#fff;
+      color:#111827;
+      border:1px solid var(--line);
+      box-shadow:none;
+    }
+    .btn:active{ transform: translateY(1px); }
 
-/* 3 columns */
-.sections-grid{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:14px;
-  margin-top:10px;
-}
+    .control{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 10px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-size:12px;
+      color:#111827;
+      user-select:none;
+    }
+    .control label{ color:var(--muted); font-weight:650; }
+    .control select{
+      border:1px solid rgba(0,0,0,.12);
+      border-radius:10px;
+      padding:6px 8px;
+      font-size:12px;
+      font-weight:650;
+      background:#fff;
+      cursor:pointer;
+      outline:none;
+    }
 
-.card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:14px;
-  padding:12px;
-  box-shadow:0 2px 10px rgba(16,24,40,.04);
-}
+    .wrap{
+      padding:0 var(--padPageX) 28px;
+      width:100%;
+    }
 
-/* COLORED HEADER */
-.card-header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:10px 12px;
-  margin:-12px -12px 10px;
-  border-radius:14px 14px 10px 10px;
-  background:var(--secBg,#fff);
-  color:var(--secText,var(--text));
-}
+    /* 3 columns */
+    .sections-grid{
+      display:grid;
+      grid-template-columns:repeat(3, 1fr);
+      gap:var(--cardGap);
+      margin-top:10px;
+      align-items:start;
+    }
 
-.card-title{
-  font-weight:800;
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:var(--cardPad);
+      box-shadow:0 2px 10px rgba(16,24,40,.04);
+      min-height: 90px;
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+    .card:hover{
+      transform: translateY(-2px);
+      box-shadow:0 12px 28px rgba(16,24,40,.10);
+      border-color:#dfe3ee;
+    }
 
-.links{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  margin-top:10px;
-}
+    /* Colored header */
+    .card-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      margin: calc(var(--cardPad) * -1) calc(var(--cardPad) * -1) 10px;
+      border-radius:14px 14px 10px 10px;
+      background:var(--secBg,#fff);
+      color:var(--secText,var(--text));
+      border-bottom: 1px solid rgba(0,0,0,.06);
+      transition: background .22s ease, color .22s ease;
+    }
 
-.link-row{
-  padding:8px 10px;
-  background:#fafbff;
-  border:1px solid #eef1f7;
-  border-radius:10px;
-}
+    .card-title{
+      font-weight:850;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      min-width:0;
+      font-size: var(--sectionTitleSize);
+    }
 
-.link-url{display:none;}
+    .title-text{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width: 260px;
+    }
 
-.icon-btn{
-  border:1px solid var(--line);
-  background:#fff;
-  padding:6px 8px;
-  border-radius:10px;
-  cursor:pointer;
-  font-size:12px;
-}
+    .mini-actions{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-shrink:0;
+    }
 
-.icon-btn.danger{
-  background:#fff5f7;
-  color:#b42318;
-}
+    .drag-handle{
+      user-select:none;
+      cursor:grab;
+      font-weight:900;
+      color: rgba(17,24,39,.55);
+      padding: 2px 6px;
+      border-radius:8px;
+      background: rgba(255,255,255,.55);
+      border: 1px solid rgba(0,0,0,.08);
+      line-height: 1;
+    }
+    body.dragging .drag-handle{ cursor:grabbing; }
 
-.color-select{
-  border:1px solid rgba(0,0,0,.12);
-  border-radius:8px;
-  padding:4px 6px;
-  font-size:12px;
-  background:white;
-}
+    .links{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-top:10px;
+      padding: 6px;
+      border-radius:12px;
+      border: 1px dashed transparent;
+    }
 
-.edit-only{display:none;}
-body.editing .edit-only{display:inline-flex;}
+    .link-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding: var(--linkPadY) var(--linkPadX);
+      background:#fafbff;
+      border:1px solid #eef1f7;
+      border-radius:10px;
+      transition: background .16s ease, border-color .16s ease, transform .16s ease;
+    }
+    .link-row:hover{
+      background:#f3f6ff;
+      border-color:#dbe3ff;
+      transform: translateY(-1px);
+    }
 
-</style>
+    .link-left{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+
+    .link-title{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-weight:650;
+      font-size: var(--linkSize);
+    }
+
+    /* Hide url line under name */
+    .link-url{ display:none; }
+
+    .icon-btn{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:6px 8px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:12px;
+      font-weight:750;
+      line-height:1;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+    }
+    .icon-btn:hover{ transform: translateY(-1px); }
+    .icon-btn.danger{
+      background:#fff5f7;
+      color:#b42318;
+      border-color:#ffd1dc;
+    }
+
+    /* Keep buttons readable on colored headers */
+    .card-header .icon-btn{
+      background: rgba(255,255,255,.86);
+      border-color: rgba(0,0,0,.12);
+    }
+
+    .color-select{
+      border:1px solid rgba(0,0,0,.12);
+      border-radius:10px;
+      padding:6px 8px;
+      font-size:12px;
+      font-weight:700;
+      background: rgba(255,255,255,.9);
+      cursor:pointer;
+      outline:none;
+    }
+
+    .add-area{
+      display:none;
+      margin-top:10px;
+      gap:8px;
+      flex-direction:column;
+    }
+
+    .row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    input{
+      width:100%;
+      padding:9px 10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      outline:none;
+      font-size:13px;
+      background:#fff;
+    }
+
+    /* Edit-only */
+    .edit-only{ display:none; }
+    body.editing .edit-only{ display:inline-flex; }
+    body.editing .add-area{ display:flex; }
+    body.editing .links{ border-color:#d1d5ff; background:#f6f7ff; }
+
+  </style>
 </head>
 
 <body>
+  <header>
+    <div class="header-left">
+      <h1>My Links</h1>
+      <div class="muted">Read mode by default. Click <b>Edit</b> to reorder / add / delete.</div>
+    </div>
 
-<header>
-  <h1>My Links</h1>
-  <div class="topbar">
-    <button id="editBtn" class="btn secondary">Edit</button>
-    <button id="saveBtn" class="btn" style="display:none;">Save</button>
+    <div class="topbar">
+      <!-- Global look controls (no backend) -->
+      <div class="control" title="Global font (saved locally)">
+        <label>Font</label>
+        <select id="fontSelect">
+          <option value="system">System</option>
+          <option value="inter">Inter-ish</option>
+          <option value="mono">Mono</option>
+          <option value="serif">Serif</option>
+        </select>
+      </div>
+
+      <button id="densityBtn" class="btn secondary" title="Toggle Compact/Comfortable">Compact</button>
+
+      <button id="editBtn" class="btn secondary">Edit</button>
+      <button id="saveBtn" class="btn" style="display:none;">Save</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="addSectionTop" class="row edit-only" style="margin-bottom:14px;">
+      <input id="newSectionName" placeholder="New section name (e.g. Tools)" />
+      <button class="btn" id="addSectionBtn">Add Section</button>
+    </div>
+
+    <div id="sectionsGrid" class="sections-grid"></div>
+
+    <div class="muted" style="margin-top:10px;">
+      Tip: In Edit mode you can drag sections and links. In Read mode: no accidental deletes.
+    </div>
   </div>
-</header>
-
-<div class="wrap">
-
-  <div id="addSectionTop" class="edit-only" style="margin-bottom:14px;">
-    <input id="newSectionName" placeholder="New section name" />
-    <button class="btn" id="addSectionBtn">Add Section</button>
-  </div>
-
-  <div id="sectionsGrid" class="sections-grid"></div>
-
-</div>
 
 <script>
-const API = "";
+  const API = ""; // same origin
 
-const COLOR_THEME = {
-  slate:{bg:"#eef2f7",text:"#111827"},
-  blue:{bg:"#e6f0ff",text:"#0b1f44"},
-  green:{bg:"#e8f7ee",text:"#0b2a16"},
-  amber:{bg:"#fff3d6",text:"#3a2a05"},
-  red:{bg:"#ffe7ea",text:"#3b0a12"},
-  purple:{bg:"#f1e8ff",text:"#24113a"},
-  pink:{bg:"#ffe8f2",text:"#3a0b22"},
-  teal:{bg:"#e6fbf8",text:"#062c2a"},
-};
+  // Not cheap 😄 — bigger palette
+  const COLOR_THEME = {
+    slate:{bg:"#eef2f7",text:"#111827"},
+    gray:{bg:"#f2f4f7",text:"#111827"},
+    blue:{bg:"#e6f0ff",text:"#0b1f44"},
+    navy:{bg:"#e9edff",text:"#0b102a"},
+    indigo:{bg:"#eee9ff",text:"#1a103a"},
+    sky:{bg:"#e6f7ff",text:"#063246"},
+    cyan:{bg:"#e6fbff",text:"#043047"},
+    teal:{bg:"#e6fbf8",text:"#062c2a"},
+    mint:{bg:"#e9fff3",text:"#0b2a16"},
+    green:{bg:"#e8f7ee",text:"#0b2a16"},
+    lime:{bg:"#f2ffd8",text:"#1f2d0a"},
+    amber:{bg:"#fff3d6",text:"#3a2a05"},
+    gold:{bg:"#fff6cc",text:"#3a2a05"},
+    orange:{bg:"#ffe8d8",text:"#3a1f05"},
+    red:{bg:"#ffe7ea",text:"#3b0a12"},
+    pink:{bg:"#ffe8f2",text:"#3a0b22"},
+    purple:{bg:"#f1e8ff",text:"#24113a"},
+    coffee:{bg:"#f3eee8",text:"#2a1d12"},
+  };
+  const COLOR_OPTIONS = Object.keys(COLOR_THEME);
 
-let state={
-  editMode:false,
-  sections:[],
-  pendingColors:new Map()
-};
+  let state = {
+    editMode: false,
+    sections: [],
+    pendingColors: new Map(),       // section_id -> color (staged until Save)
+    sectionSortable: null,
+    linkSortables: new Map(),
+  };
 
-const grid=document.getElementById("sectionsGrid");
-const editBtn=document.getElementById("editBtn");
-const saveBtn=document.getElementById("saveBtn");
+  const elGrid = document.getElementById("sectionsGrid");
+  const editBtn = document.getElementById("editBtn");
+  const saveBtn = document.getElementById("saveBtn");
 
-editBtn.onclick=()=>{
-  state.pendingColors.clear();
-  state.editMode=true;
-  document.body.classList.add("editing");
-  editBtn.style.display="none";
-  saveBtn.style.display="inline-flex";
-  render();
-};
+  // -------- Global look controls (local-only) --------
+  const fontSelect = document.getElementById("fontSelect");
+  const densityBtn = document.getElementById("densityBtn");
 
-saveBtn.onclick=async()=>{
-  for(const [id,color] of state.pendingColors){
-    await fetch(`/sections/${id}`,{
+  function applyFont(key){
+    // “Inter-ish” = clean modern stack without external downloads
+    const map = {
+      system: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      inter:  "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      mono:   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+      serif:  "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
+    };
+    document.documentElement.style.setProperty("--fontFamily", map[key] || map.system);
+  }
+
+  function setCompact(on){
+    document.body.classList.toggle("compact", on);
+    densityBtn.textContent = on ? "Comfortable" : "Compact";
+  }
+
+  // Load prefs
+  (function initPrefs(){
+    const f = localStorage.getItem("links_font") || "system";
+    const c = localStorage.getItem("links_compact") === "1";
+    fontSelect.value = f;
+    applyFont(f);
+    setCompact(c);
+  })();
+
+  fontSelect.addEventListener("change", () => {
+    const v = fontSelect.value;
+    localStorage.setItem("links_font", v);
+    applyFont(v);
+  });
+
+  densityBtn.addEventListener("click", () => {
+    const on = !document.body.classList.contains("compact");
+    localStorage.setItem("links_compact", on ? "1" : "0");
+    setCompact(on);
+  });
+
+  // -------- Helpers --------
+  function escapeHtml(s){
+    return (s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;");
+  }
+
+  async function apiGet(path){
+    const r = await fetch(API + path);
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiPost(path, body){
+    const r = await fetch(API + path, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiPut(path, body){
+    const r = await fetch(API + path, {
       method:"PUT",
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({color})
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiDelete(path){
+    const r = await fetch(API + path, { method:"DELETE" });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  function setEditMode(on){
+    state.editMode = on;
+    document.body.classList.toggle("editing", on);
+    editBtn.style.display = on ? "none" : "inline-flex";
+    saveBtn.style.display = on ? "inline-flex" : "none";
+
+    render();
+    if(on) enableSortables();
+    else destroySortables();
+  }
+
+  editBtn.addEventListener("click", () => {
+    state.pendingColors.clear(); // stage colors fresh
+    setEditMode(true);
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    try{
+      // Save staged section colors only on Save
+      for(const [sectionId, color] of state.pendingColors.entries()){
+        await apiPut(`/sections/${sectionId}`, { color });
+      }
+      state.pendingColors.clear();
+
+      setEditMode(false);
+      await load(); // refresh
+    }catch(err){
+      alert("Save failed: " + err);
+    }
+  });
+
+  document.getElementById("addSectionBtn").addEventListener("click", async () => {
+    try{
+      const name = document.getElementById("newSectionName").value.trim();
+      if(!name) return alert("Type a section name");
+      await apiPost("/sections", { name });
+      document.getElementById("newSectionName").value = "";
+      await load();
+    }catch(err){
+      alert(String(err));
+    }
+  });
+
+  function render(){
+    elGrid.innerHTML = "";
+
+    for(const sec of state.sections){
+      const effectiveColor = state.pendingColors.get(sec.id) ?? sec.color ?? "slate";
+      const theme = COLOR_THEME[effectiveColor] ?? COLOR_THEME.slate;
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.sectionId = sec.id;
+      card.style.setProperty("--secBg", theme.bg);
+      card.style.setProperty("--secText", theme.text);
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title">
+            <span class="drag-handle edit-only" title="Drag section">⠿</span>
+            <span class="title-text">${escapeHtml(sec.name)}</span>
+
+            <button class="icon-btn edit-only"
+              data-action="rename-section"
+              data-section-id="${sec.id}"
+              title="Rename section">✎</button>
+          </div>
+
+          <div class="mini-actions">
+            <select class="color-select edit-only"
+              data-action="color-section"
+              data-section-id="${sec.id}"
+              title="Section color">
+              ${COLOR_OPTIONS.map(c => `
+                <option value="${c}" ${c === effectiveColor ? "selected" : ""}>${c}</option>
+              `).join("")}
+            </select>
+
+            <button class="icon-btn danger edit-only"
+              data-action="delete-section"
+              data-section-id="${sec.id}"
+              title="Delete section">Del</button>
+          </div>
+        </div>
+
+        <div class="links" id="links-${sec.id}">
+          ${(sec.links ?? []).map(l => `
+            <div class="link-row" data-link-id="${l.id}">
+              <div class="link-left">
+                <span class="drag-handle edit-only" title="Drag link">⠿</span>
+                <div style="min-width:0;">
+                  <div class="link-title">
+                    <a href="${escapeHtml(l.url)}" target="_blank" rel="noreferrer">${escapeHtml(l.title)}</a>
+                  </div>
+                  <div class="link-url">${escapeHtml(l.url)}</div>
+                </div>
+              </div>
+
+              <div class="mini-actions edit-only">
+                <button class="icon-btn" data-action="edit-link" data-link-id="${l.id}">Edit</button>
+                <button class="icon-btn danger" data-action="delete-link" data-link-id="${l.id}">Del</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="add-area">
+          <div class="row">
+            <input placeholder="Title" id="title-${sec.id}">
+            <input placeholder="https://..." id="url-${sec.id}">
+            <button class="btn" data-action="add-link" data-section-id="${sec.id}">Add</button>
+          </div>
+        </div>
+      `;
+
+      elGrid.appendChild(card);
+    }
+
+    // bind actions
+    elGrid.querySelectorAll("[data-action]").forEach(el => {
+      const action = el.dataset.action;
+      if(action === "color-section"){
+        el.addEventListener("change", handleAction);
+      }else{
+        el.addEventListener("click", handleAction);
+      }
     });
   }
-  state.pendingColors.clear();
-  state.editMode=false;
-  document.body.classList.remove("editing");
-  editBtn.style.display="inline-flex";
-  saveBtn.style.display="none";
-  await load();
-};
 
-async function load(){
-  const r=await fetch("/sections");
-  state.sections=await r.json();
-  render();
-}
+  async function handleAction(e){
+    const a = e.currentTarget.dataset.action;
 
-function render(){
-  grid.innerHTML="";
-  for(const sec of state.sections){
-    const color=state.pendingColors.get(sec.id)||sec.color||"slate";
-    const theme=COLOR_THEME[color];
+    try{
+      if(a === "color-section"){
+        const sectionId = Number(e.currentTarget.dataset.sectionId);
+        const color = e.currentTarget.value;
+        state.pendingColors.set(sectionId, color);
 
-    const card=document.createElement("div");
-    card.className="card";
-    card.style.setProperty("--secBg",theme.bg);
-    card.style.setProperty("--secText",theme.text);
+        // preview immediately
+        render();
+        if(state.editMode) enableSortables();
+        return;
+      }
 
-    card.innerHTML=`
-      <div class="card-header">
-        <div class="card-title">${sec.name}</div>
-        <div>
-          <select class="color-select edit-only" data-id="${sec.id}">
-            ${Object.keys(COLOR_THEME).map(c=>
-              `<option value="${c}" ${c===color?'selected':''}>${c}</option>`
-            ).join("")}
-          </select>
-        </div>
-      </div>
-      <div class="links">
-        ${sec.links.map(l=>`
-          <div class="link-row">
-            <a href="${l.url}" target="_blank">${l.title}</a>
-          </div>
-        `).join("")}
-      </div>
-    `;
+      if(a === "delete-section"){
+        const id = Number(e.currentTarget.dataset.sectionId);
+        if(confirm("Delete section and all links?")){
+          await apiDelete(`/sections/${id}`);
+          await load();
+        }
+        return;
+      }
 
-    grid.appendChild(card);
+      if(a === "rename-section"){
+        const id = Number(e.currentTarget.dataset.sectionId);
+        const sec = state.sections.find(s => s.id === id);
+        const name = prompt("New section name:", sec?.name ?? "");
+        if(name && name.trim()){
+          await apiPut(`/sections/${id}`, { name: name.trim() });
+          await load();
+        }
+        return;
+      }
+
+      if(a === "add-link"){
+        const sectionId = Number(e.currentTarget.dataset.sectionId);
+        const titleEl = document.getElementById(`title-${sectionId}`);
+        const urlEl = document.getElementById(`url-${sectionId}`);
+        const title = (titleEl?.value ?? "").trim();
+        const url = (urlEl?.value ?? "").trim();
+
+        if(!title) return alert("Title required");
+        if(!url) return alert("URL required");
+
+        await apiPost(`/sections/${sectionId}/links`, { title, url });
+        titleEl.value = "";
+        urlEl.value = "";
+        await load();
+        return;
+      }
+
+      if(a === "delete-link"){
+        const linkId = Number(e.currentTarget.dataset.linkId);
+        if(confirm("Delete this link?")){
+          await apiDelete(`/links/${linkId}`);
+          await load();
+        }
+        return;
+      }
+
+      if(a === "edit-link"){
+        const linkId = Number(e.currentTarget.dataset.linkId);
+
+        let found = null;
+        for(const s of state.sections){
+          const l = (s.links ?? []).find(x => x.id === linkId);
+          if(l){ found = l; break; }
+        }
+        if(!found) return;
+
+        const newTitle = prompt("Title:", found.title);
+        if(newTitle === null) return;
+
+        const newUrl = prompt("URL:", found.url);
+        if(newUrl === null) return;
+
+        await apiPut(`/links/${linkId}`, { title: newTitle.trim(), url: newUrl.trim() });
+        await load();
+        return;
+      }
+
+    }catch(err){
+      alert(String(err));
+    }
   }
 
-  document.querySelectorAll(".color-select").forEach(sel=>{
-    sel.onchange=e=>{
-      state.pendingColors.set(Number(e.target.dataset.id),e.target.value);
-      render();
-    };
-  });
-}
+  function destroySortables(){
+    if(state.sectionSortable){
+      try{ state.sectionSortable.destroy(); }catch(_){}
+      state.sectionSortable = null;
+    }
+    for(const s of state.linkSortables.values()){
+      try{ s.destroy(); }catch(_){}
+    }
+    state.linkSortables.clear();
+  }
 
-load();
+  function enableSortables(){
+    destroySortables();
+
+    // Sections sortable
+    state.sectionSortable = new Sortable(elGrid, {
+      animation: 150,
+      handle: ".card-header .drag-handle",
+      draggable: ".card",
+      onStart: () => document.body.classList.add("dragging"),
+      onEnd: async () => {
+        document.body.classList.remove("dragging");
+        const ordered = [...elGrid.querySelectorAll(".card")]
+          .map(c => Number(c.dataset.sectionId))
+          .filter(n => Number.isFinite(n));
+
+        try{
+          await apiPut("/sections-reorder", { ordered_ids: ordered });
+        }catch(err){
+          alert("Section reorder failed: " + err);
+          await load();
+        }
+      }
+    });
+
+    // Links sortable per section
+    for(const sec of state.sections){
+      const listEl = document.getElementById(`links-${sec.id}`);
+      if(!listEl) continue;
+
+      const sortable = new Sortable(listEl, {
+        animation: 150,
+        handle: ".drag-handle",
+        draggable: ".link-row",
+        onStart: () => document.body.classList.add("dragging"),
+        onEnd: async () => {
+          document.body.classList.remove("dragging");
+          const ordered = [...listEl.querySelectorAll(".link-row")]
+            .map(r => Number(r.dataset.linkId))
+            .filter(n => Number.isFinite(n));
+
+          try{
+            await apiPut(`/sections/${sec.id}/links-reorder`, { ordered_ids: ordered });
+          }catch(err){
+            alert("Link reorder failed: " + err);
+            await load();
+          }
+        }
+      });
+
+      state.linkSortables.set(sec.id, sortable);
+    }
+  }
+
+  async function load(){
+    state.sections = await apiGet("/sections");
+    render();
+    if(state.editMode) enableSortables();
+  }
+
+  load().catch(err => alert(String(err)));
 </script>
-
 </body>
 </html>
