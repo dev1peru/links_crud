@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +25,7 @@ class Section(Base):
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # NEW
+    # Keep it (doesn't affect reorder). If your DB doesn't have it yet, delete links.db once.
     color = Column(String, default="slate", nullable=False)
 
     links = relationship("Link", cascade="all, delete", passive_deletes=True)
@@ -64,7 +64,7 @@ class SectionCreate(BaseModel):
 
 class SectionUpdate(BaseModel):
     name: Optional[str] = None
-    color: Optional[str] = None
+    color: Optional[str] = None  # harmless even if you don’t use it in UI
 
 
 class LinkCreate(BaseModel):
@@ -77,39 +77,18 @@ class LinkUpdate(BaseModel):
     url: Optional[AnyUrl] = None
 
 
-# ✅ SUPER IMPORTANT:
-# Do NOT use List[int] here, because Pydantic will explode BEFORE we can clean garbage.
 class ReorderPayload(BaseModel):
-    ordered_ids: List[Any]
+    ordered_ids: List[int]
 
 
 ALLOWED_COLORS = {"slate", "blue", "green", "amber", "red", "purple", "pink", "teal"}
 
 
-def clean_int_ids(values: List[Any]) -> List[int]:
-    """
-    Converts ["7","undefined","color",9] -> [7,9]
-    """
-    cleaned: List[int] = []
-    if not isinstance(values, list):
-        return cleaned
-
-    for x in values:
-        try:
-            i = int(str(x).strip())
-            if i > 0:
-                cleaned.append(i)
-        except Exception:
-            continue
-
-    # remove duplicates but keep order
-    seen = set()
-    out = []
-    for i in cleaned:
-        if i not in seen:
-            seen.add(i)
-            out.append(i)
-    return out
+# -----------------------------
+# Helpers
+# -----------------------------
+def get_db():
+    return SessionLocal()
 
 
 # -----------------------------
@@ -117,7 +96,7 @@ def clean_int_ids(values: List[Any]) -> List[int]:
 # -----------------------------
 @app.get("/sections")
 def list_sections():
-    db = SessionLocal()
+    db = get_db()
     sections = db.query(Section).order_by(Section.sort_order).all()
 
     result = []
@@ -147,17 +126,14 @@ def create_section(data: SectionCreate):
     if not name:
         raise HTTPException(400, "Section name cannot be empty")
 
-    db = SessionLocal()
+    db = get_db()
 
     exists = db.query(Section).filter(Section.name == name).first()
     if exists:
         db.close()
         raise HTTPException(409, "Section name already exists")
 
-    max_sort = db.query(Section).order_by(Section.sort_order.desc()).first()
-    next_sort = (max_sort.sort_order + 1) if max_sort else 0
-
-    s = Section(name=name, sort_order=next_sort)
+    s = Section(name=name)
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -167,7 +143,7 @@ def create_section(data: SectionCreate):
 
 @app.put("/sections/{section_id}")
 def update_section(section_id: int, data: SectionUpdate):
-    db = SessionLocal()
+    db = get_db()
     s = db.query(Section).get(section_id)
     if not s:
         db.close()
@@ -204,7 +180,7 @@ def update_section(section_id: int, data: SectionUpdate):
 
 @app.delete("/sections/{section_id}")
 def delete_section(section_id: int):
-    db = SessionLocal()
+    db = get_db()
     s = db.query(Section).get(section_id)
     if not s:
         db.close()
@@ -223,22 +199,14 @@ def add_link(section_id: int, data: LinkCreate):
     if not title:
         raise HTTPException(400, "Title cannot be empty")
 
-    db = SessionLocal()
+    db = get_db()
 
     s = db.query(Section).get(section_id)
     if not s:
         db.close()
         raise HTTPException(404, "Section not found")
 
-    max_sort = (
-        db.query(Link)
-        .filter(Link.section_id == section_id)
-        .order_by(Link.sort_order.desc())
-        .first()
-    )
-    next_sort = (max_sort.sort_order + 1) if max_sort else 0
-
-    l = Link(section_id=section_id, title=title, url=url, sort_order=next_sort)
+    l = Link(section_id=section_id, title=title, url=url)
     db.add(l)
     db.commit()
     db.refresh(l)
@@ -248,7 +216,7 @@ def add_link(section_id: int, data: LinkCreate):
 
 @app.put("/links/{link_id}")
 def update_link(link_id: int, data: LinkUpdate):
-    db = SessionLocal()
+    db = get_db()
     l = db.query(Link).get(link_id)
     if not l:
         db.close()
@@ -271,7 +239,7 @@ def update_link(link_id: int, data: LinkUpdate):
 
 @app.delete("/links/{link_id}")
 def delete_link(link_id: int):
-    db = SessionLocal()
+    db = get_db()
     l = db.query(Link).get(link_id)
     if not l:
         db.close()
@@ -283,36 +251,26 @@ def delete_link(link_id: int):
     return {"ok": True}
 
 
-@app.put("/sections/reorder")
+# ✅ IMPORTANT FIX:
+# These routes do NOT collide with /sections/{section_id}
+@app.put("/sections-reorder")
 def reorder_sections(data: ReorderPayload):
-    ordered = clean_int_ids(data.ordered_ids)
-
-    db = SessionLocal()
-    existing_ids = {x[0] for x in db.query(Section.id).all()}
-    ordered = [sid for sid in ordered if sid in existing_ids]
-
-    for idx, sid in enumerate(ordered):
+    db = get_db()
+    for idx, sid in enumerate(data.ordered_ids):
         db.query(Section).filter(Section.id == sid).update({"sort_order": idx})
-
     db.commit()
     db.close()
-    return {"ok": True, "count": len(ordered)}
+    return {"ok": True}
 
 
-@app.put("/sections/{section_id}/links/reorder")
+@app.put("/sections/{section_id}/links-reorder")
 def reorder_links(section_id: int, data: ReorderPayload):
-    ordered = clean_int_ids(data.ordered_ids)
-
-    db = SessionLocal()
-    existing_ids = {x[0] for x in db.query(Link.id).filter(Link.section_id == section_id).all()}
-    ordered = [lid for lid in ordered if lid in existing_ids]
-
-    for idx, lid in enumerate(ordered):
+    db = get_db()
+    for idx, lid in enumerate(data.ordered_ids):
         db.query(Link).filter(Link.id == lid, Link.section_id == section_id).update({"sort_order": idx})
-
     db.commit()
     db.close()
-    return {"ok": True, "count": len(ordered)}
+    return {"ok": True}
 
 
 # -----------------------------
