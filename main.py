@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, AnyUrl
+from pydantic import BaseModel, AnyUrl, validator
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -25,7 +25,7 @@ class Section(Base):
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # ✅ NEW: section color (stores a small token like "blue", "green", etc.)
+    # section color token
     color = Column(String, default="slate", nullable=False)
 
     links = relationship("Link", cascade="all, delete", passive_deletes=True)
@@ -78,11 +78,40 @@ class LinkUpdate(BaseModel):
 
 
 class ReorderPayload(BaseModel):
+    # keep as List[int], but we will CLEAN it before validation finishes
     ordered_ids: List[int]
+
+    @validator("ordered_ids", pre=True)
+    def normalize_ids(cls, v):
+        """
+        Frontend sometimes sends garbage like: ["7","undefined","color",9]
+        This makes reorder crash with 422. We sanitize it.
+        """
+        if v is None:
+            return []
+
+        cleaned = []
+        # v should be a list; but handle any weird cases
+        if not isinstance(v, list):
+            v = [v]
+
+        for x in v:
+            try:
+                i = int(str(x).strip())
+                if i > 0:
+                    cleaned.append(i)
+            except Exception:
+                # ignore junk: "undefined", "color", "", None, etc.
+                continue
+
+        if not cleaned:
+            # you can also choose to return [] and just do nothing
+            raise ValueError("ordered_ids must contain at least one valid integer id")
+
+        return cleaned
 
 
 ALLOWED_COLORS = {"slate", "blue", "green", "amber", "red", "purple", "pink", "teal"}
-
 
 # -----------------------------
 # Routes
@@ -126,7 +155,11 @@ def create_section(data: SectionCreate):
         db.close()
         raise HTTPException(409, "Section name already exists")
 
-    s = Section(name=name)
+    # put new sections at bottom
+    max_sort = db.query(Section).order_by(Section.sort_order.desc()).first()
+    next_sort = (max_sort.sort_order + 1) if max_sort else 0
+
+    s = Section(name=name, sort_order=next_sort)
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -199,7 +232,16 @@ def add_link(section_id: int, data: LinkCreate):
         db.close()
         raise HTTPException(404, "Section not found")
 
-    l = Link(section_id=section_id, title=title, url=url)
+    # put new links at bottom (within section)
+    max_sort = (
+        db.query(Link)
+        .filter(Link.section_id == section_id)
+        .order_by(Link.sort_order.desc())
+        .first()
+    )
+    next_sort = (max_sort.sort_order + 1) if max_sort else 0
+
+    l = Link(section_id=section_id, title=title, url=url, sort_order=next_sort)
     db.add(l)
     db.commit()
     db.refresh(l)
@@ -247,21 +289,33 @@ def delete_link(link_id: int):
 @app.put("/sections/reorder")
 def reorder_sections(data: ReorderPayload):
     db = SessionLocal()
-    for idx, sid in enumerate(data.ordered_ids):
+
+    # only update IDs that exist
+    existing_ids = {x[0] for x in db.query(Section.id).all()}
+    ordered = [sid for sid in data.ordered_ids if sid in existing_ids]
+
+    for idx, sid in enumerate(ordered):
         db.query(Section).filter(Section.id == sid).update({"sort_order": idx})
+
     db.commit()
     db.close()
-    return {"ok": True}
+    return {"ok": True, "count": len(ordered)}
 
 
 @app.put("/sections/{section_id}/links/reorder")
 def reorder_links(section_id: int, data: ReorderPayload):
     db = SessionLocal()
-    for idx, lid in enumerate(data.ordered_ids):
+
+    # only update links in that section
+    existing_ids = {x[0] for x in db.query(Link.id).filter(Link.section_id == section_id).all()}
+    ordered = [lid for lid in data.ordered_ids if lid in existing_ids]
+
+    for idx, lid in enumerate(ordered):
         db.query(Link).filter(Link.id == lid, Link.section_id == section_id).update({"sort_order": idx})
+
     db.commit()
     db.close()
-    return {"ok": True}
+    return {"ok": True, "count": len(ordered)}
 
 
 # -----------------------------
