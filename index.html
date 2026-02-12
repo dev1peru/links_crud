@@ -71,7 +71,6 @@
 
     .wrap{
       padding:0 22px 28px;
-      /* ✅ keeps it looking neat on big screens */
       max-width: 1200px;
       margin: 0 auto;
     }
@@ -103,13 +102,21 @@
       min-height: 90px;
     }
 
+    /* ✅ Colored section header */
     .card-header{
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:10px;
-      margin-bottom:8px;
+
+      padding:10px 12px;
+      margin:-12px -12px 10px;
+      border-radius:14px 14px 10px 10px;
+      background: var(--secBg, #ffffff);
+      color: var(--secText, var(--text));
+      border-bottom: 1px solid rgba(0,0,0,.06);
     }
+
     .card-title{
       display:flex;
       align-items:center;
@@ -158,14 +165,9 @@
       text-overflow:ellipsis;
       font-weight:650;
     }
-    .link-url{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      font-size:12px;
-      color:var(--muted);
-      max-width: 260px;
-    }
+
+    /* ✅ Hide URL line under each title */
+    .link-url{ display:none; }
 
     .mini-actions{
       display:flex;
@@ -190,8 +192,25 @@
       background:#fff5f7;
     }
 
+    /* keep buttons readable on colored headers */
+    .card-header .icon-btn{
+      background: rgba(255,255,255,.85);
+    }
+
+    /* dropdown style */
+    .color-select{
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.9);
+      border-radius:10px;
+      padding:6px 8px;
+      font-weight:650;
+      font-size:12px;
+      cursor:pointer;
+    }
+
     .edit-only{ display:none; }
     body.editing .edit-only{ display:inline-flex; }
+    body.editing select.edit-only{ display:inline-flex; }
     body.editing .links{ border-color:#d1d5ff; background:#f6f7ff; }
     body.editing .card{ outline: 1px solid #dbe0ff; }
 
@@ -254,11 +273,24 @@
 <script>
   const API = ""; // same origin
 
+  const COLOR_THEME = {
+    slate:  { bg:"#eef2f7", text:"#111827" },
+    blue:   { bg:"#e6f0ff", text:"#0b1f44" },
+    green:  { bg:"#e8f7ee", text:"#0b2a16" },
+    amber:  { bg:"#fff3d6", text:"#3a2a05" },
+    red:    { bg:"#ffe7ea", text:"#3b0a12" },
+    purple: { bg:"#f1e8ff", text:"#24113a" },
+    pink:   { bg:"#ffe8f2", text:"#3a0b22" },
+    teal:   { bg:"#e6fbf8", text:"#062c2a" },
+  };
+  const COLOR_OPTIONS = Object.keys(COLOR_THEME);
+
   let state = {
     editMode: false,
     sections: [],
     sectionSortable: null,
     linkSortables: new Map(),
+    pendingSectionColors: new Map(), // section_id -> color (staged until Save)
   };
 
   const elGrid = document.getElementById("sectionsGrid");
@@ -275,8 +307,24 @@
     else destroySortables();
   }
 
-  editBtn.addEventListener("click", () => setEditMode(true));
-  saveBtn.addEventListener("click", () => setEditMode(false));
+  editBtn.addEventListener("click", () => {
+    state.pendingSectionColors.clear();
+    setEditMode(true);
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    try{
+      // Persist staged colors only when user hits Save
+      for (const [sectionId, color] of state.pendingSectionColors.entries()){
+        await apiPut(`/sections/${sectionId}`, { color });
+      }
+      state.pendingSectionColors.clear();
+      setEditMode(false);
+      await load(); // refresh with saved colors
+    }catch(err){
+      alert("Save failed: " + err);
+    }
+  });
 
   document.getElementById("addSectionBtn").addEventListener("click", async () => {
     const name = document.getElementById("newSectionName").value.trim();
@@ -327,6 +375,12 @@
       card.className = "card";
       card.dataset.sectionId = sec.id;
 
+      const effectiveColor = state.pendingSectionColors.get(sec.id) ?? sec.color ?? "slate";
+      const theme = COLOR_THEME[effectiveColor] ?? COLOR_THEME.slate;
+
+      card.style.setProperty("--secBg", theme.bg);
+      card.style.setProperty("--secText", theme.text);
+
       card.innerHTML = `
         <div class="card-header">
           <div class="card-title">
@@ -335,8 +389,14 @@
             <button class="icon-btn edit-only" data-action="rename-section" data-section-id="${sec.id}" title="Rename">✎</button>
           </div>
 
-          <div class="mini-actions edit-only">
-            <button class="icon-btn danger" data-action="delete-section" data-section-id="${sec.id}" title="Delete section">Del</button>
+          <div class="mini-actions">
+            <select class="color-select edit-only" data-action="color-section" data-section-id="${sec.id}">
+              ${COLOR_OPTIONS.map(c => `
+                <option value="${c}" ${c === effectiveColor ? "selected" : ""}>${c}</option>
+              `).join("")}
+            </select>
+
+            <button class="icon-btn danger edit-only" data-action="delete-section" data-section-id="${sec.id}" title="Delete section">Del</button>
           </div>
         </div>
 
@@ -376,12 +436,28 @@
     elGrid.querySelectorAll("[data-action]").forEach(btn => {
       btn.addEventListener("click", handleActionClick);
     });
+
+    // The color dropdown uses "change" events (not click)
+    elGrid.querySelectorAll('select[data-action="color-section"]').forEach(sel => {
+      sel.addEventListener("change", handleActionClick);
+    });
   }
 
   async function handleActionClick(e){
     const a = e.currentTarget.dataset.action;
 
     try{
+      if(a === "color-section"){
+        const sectionId = Number(e.currentTarget.dataset.sectionId);
+        const color = e.currentTarget.value;
+        state.pendingSectionColors.set(sectionId, color);
+
+        // preview immediately
+        render();
+        if(state.editMode) enableSortables();
+        return;
+      }
+
       if(a === "delete-section"){
         const id = Number(e.currentTarget.dataset.sectionId);
         if(confirm("Delete section and all links?")){
