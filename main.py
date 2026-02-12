@@ -81,7 +81,18 @@ class ReorderPayload(BaseModel):
     ordered_ids: List[int]
 
 
-ALLOWED_COLORS = {"slate", "blue", "green", "amber", "red", "purple", "pink", "teal"}
+ALLOWED_COLORS = {
+    "slate", "gray",
+    "blue", "navy", "indigo", "sky", "cyan",
+    "teal", "mint",
+    "green", "lime",
+    "amber", "gold", "orange",
+    "red",
+    "pink",
+    "purple",
+    "coffee",
+}
+
 
 
 # -----------------------------
