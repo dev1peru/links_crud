@@ -1,442 +1,498 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
-<title>My Links</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 20px; background:#f7f7f7; }
-  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-  .topbar h2 { margin:0; }
-  .right { display:flex; gap:8px; align-items:center; }
-  .hint { font-size:12px; opacity:.7; }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Links CRUD</title>
 
-  .grid.view-layout{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
-  @media (max-width: 1100px){ .grid.view-layout{ grid-template-columns:repeat(2, 1fr); } }
-  @media (max-width: 700px){ .grid.view-layout{ grid-template-columns:repeat(1, 1fr); } }
+  <!-- SortableJS (drag & drop) -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
-  .grid.edit-layout{ display:flex; flex-direction:column; gap:12px; align-items:center; }
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#121826;
+      --muted:#667085;
+      --line:#e6e8ef;
+      --btn:#111827;
+      --btnText:#fff;
+      --danger:#e11d48;
+    }
 
-  .card { border:1px solid #ddd; border-radius:12px; padding:12px; background:white; }
-  .grid.edit-layout .section-card{ width:100%; max-width:1100px; }
-  .section-card.dragging { opacity:.45; }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
 
-  .section-header { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-  .section-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+    header{
+      padding:18px 22px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    h1{margin:0;font-size:22px}
+    .topbar{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .btn{
+      border:0;
+      background:var(--btn);
+      color:var(--btnText);
+      padding:8px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      font-size:13px;
+    }
+    .btn.secondary{
+      background:#fff;
+      color:#111827;
+      border:1px solid var(--line);
+    }
+    .btn.danger{
+      background:var(--danger);
+    }
 
-  .section-handle, .drag-handle {
-    cursor:grab; user-select:none; opacity:.75; font-size:14px;
-    padding:4px 6px; border-radius:8px; border:1px solid #eee; background:#fafafa;
-  }
-  .section-handle:active, .drag-handle:active { cursor:grabbing; }
+    .wrap{
+      padding:0 22px 28px;
+    }
 
-  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-  input, select {
-    flex:1; min-width:220px; padding:8px;
-    border-radius:8px; border:1px solid #ddd;
-  }
+    /* GRID that wraps to next rows (vertical movement works) */
+    .sections-grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap:14px;
+      align-items:start;
+    }
 
-  button { cursor:pointer; padding:8px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  .btn-primary { background:#111; color:white; border-color:#111; }
-  .btn-danger { background:#ff4d4d; color:white; font-size:12px; padding:4px 8px; border-radius:8px; border-color:#ff4d4d; }
-  .btn-small { padding:6px 10px; font-size:12px; }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      box-shadow: 0 2px 10px rgba(16,24,40,.04);
+      min-height: 90px;
+    }
 
-  .link-row {
-    display:flex; align-items:center; gap:10px;
-    padding:6px 8px;
-    border:1px solid #eee;
-    border-radius:10px;
-    margin:6px 0;
-    background:white;
-  }
-  .link-row.dragging { opacity:.5; }
+    .card-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+    }
+    .card-title{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-weight:800;
+    }
+    .drag-handle{
+      user-select:none;
+      cursor:grab;
+      font-weight:900;
+      color:var(--muted);
+    }
+    .dragging .drag-handle{cursor:grabbing}
 
-  .link-title { flex:1; text-decoration:none; color:#111; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .link-title:hover { text-decoration:underline; }
+    .muted{color:var(--muted); font-size:12px}
 
-  .hidden { display:none !important; }
+    .links{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding:6px;
+      border-radius:12px;
+      border:1px dashed transparent;
+    }
 
-  .section-color-bar { height:6px; border-radius:10px; margin:-12px -12px 10px -12px; }
-  .c-slate { background:#64748b; }
-  .c-blue { background:#3b82f6; }
-  .c-green { background:#22c55e; }
-  .c-amber { background:#f59e0b; }
-  .c-red { background:#ef4444; }
-  .c-purple { background:#a855f7; }
-  .c-pink { background:#ec4899; }
-  .c-teal { background:#14b8a6; }
+    .link-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:8px 10px;
+      background:#fafbff;
+      border:1px solid #eef1f7;
+      border-radius:10px;
+    }
+    .link-left{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+    .link-title{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-weight:650;
+    }
+    .link-url{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-size:12px;
+      color:var(--muted);
+      max-width: 260px;
+    }
 
-  .edit-inline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; }
-  .edit-inline input { min-width:200px; }
-</style>
+    .mini-actions{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-shrink:0;
+    }
+
+    .icon-btn{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:6px 8px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:12px;
+      line-height:1;
+    }
+    .icon-btn.danger{
+      border-color: #ffd1dc;
+      color: #b42318;
+      background:#fff5f7;
+    }
+
+    .edit-only{ display:none; }
+    body.editing .edit-only{ display:inline-flex; }
+    body.editing .links{ border-color:#d1d5ff; background:#f6f7ff; }
+    body.editing .card{ outline: 1px solid #dbe0ff; }
+
+    .add-area{
+      display:none;
+      margin-top:10px;
+      gap:8px;
+      flex-direction:column;
+    }
+    body.editing .add-area{ display:flex; }
+
+    input{
+      width:100%;
+      padding:9px 10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      outline:none;
+      font-size:13px;
+      background:#fff;
+    }
+
+    .row{
+      display:flex;
+      gap:8px;
+    }
+
+    .hint{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:10px;
+    }
+  </style>
 </head>
+
 <body>
+  <header>
+    <div>
+      <h1>My Links</h1>
+      <div class="muted">Read mode by default. Click <b>Edit</b> to reorder / add / delete.</div>
+    </div>
+    <div class="topbar">
+      <button id="editBtn" class="btn secondary">Edit</button>
+      <button id="saveBtn" class="btn" style="display:none;">Save</button>
+    </div>
+  </header>
 
-<div class="topbar">
-  <h2>My Links</h2>
-  <div class="right">
-    <span id="modeHint" class="hint">View mode</span>
-    <button id="editBtn" class="btn-primary" onclick="toggleEdit()">Edit</button>
+  <div class="wrap">
+    <div id="addSectionTop" class="row edit-only" style="margin-bottom:14px;">
+      <input id="newSectionName" placeholder="New section name (e.g. Tools)" />
+      <button class="btn" id="addSectionBtn">Add Section</button>
+    </div>
+
+    <div id="sectionsGrid" class="sections-grid"></div>
+
+    <div class="hint">
+      Tip: In Edit mode you can drag sections and links. In Read mode: no accidental deletes.
+    </div>
   </div>
-</div>
-
-<div class="row">
-  <input id="sectionName" placeholder="New section name (e.g., Tools)">
-  <button id="addSectionBtn" onclick="createSection()" disabled>Add Section</button>
-</div>
-
-<hr>
-<div id="grid" class="grid view-layout"></div>
 
 <script>
-let editMode = false;
+  // Same origin (served by FastAPI static mount)
+  const API = "";
 
-let draggedSectionCard = null;
-let draggedLinkEl = null;
+  let state = {
+    editMode: false,
+    sections: [],
+    sectionSortable: null,
+    linkSortables: new Map(), // sectionId -> sortable instance
+  };
 
-const COLORS = [
-  { value:"slate", label:"Slate" },
-  { value:"blue", label:"Blue" },
-  { value:"green", label:"Green" },
-  { value:"amber", label:"Amber" },
-  { value:"red", label:"Red" },
-  { value:"purple", label:"Purple" },
-  { value:"pink", label:"Pink" },
-  { value:"teal", label:"Teal" },
-];
+  const elGrid = document.getElementById("sectionsGrid");
+  const editBtn = document.getElementById("editBtn");
+  const saveBtn = document.getElementById("saveBtn");
 
-function toggleEdit(){
-  editMode = !editMode;
-  load();
-}
-
-function setTopbar(){
-  const hint = document.getElementById("modeHint");
-  const btn = document.getElementById("editBtn");
-  const addBtn = document.getElementById("addSectionBtn");
-  const grid = document.getElementById("grid");
-
-  if (editMode){
-    hint.textContent = "Edit mode";
-    btn.textContent = "Save";
-    addBtn.disabled = false;
-    grid.className = "grid edit-layout";
-  } else {
-    hint.textContent = "View mode";
-    btn.textContent = "Edit";
-    addBtn.disabled = true;
-    grid.className = "grid view-layout";
+  function setEditMode(on){
+    state.editMode = on;
+    document.body.classList.toggle("editing", on);
+    editBtn.style.display = on ? "none" : "inline-flex";
+    saveBtn.style.display = on ? "inline-flex" : "none";
+    render();
+    if(on){
+      enableSortables();
+    }else{
+      destroySortables();
+    }
   }
-}
 
-function colorOptionsHtml(selected){
-  const s = (selected || "slate").toLowerCase();
-  return COLORS.map(c => `<option value="${c.value}" ${c.value===s?"selected":""}>${c.label}</option>`).join("");
-}
+  editBtn.addEventListener("click", () => setEditMode(true));
+  saveBtn.addEventListener("click", () => setEditMode(false));
 
-function safeInt(x){
-  const n = parseInt(String(x ?? "").trim(), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+  document.getElementById("addSectionBtn").addEventListener("click", async () => {
+    const name = document.getElementById("newSectionName").value.trim();
+    if(!name) return alert("Type a section name");
+    await apiPost("/sections", {name});
+    document.getElementById("newSectionName").value = "";
+    await load();
+  });
 
-async function load(){
-  setTopbar();
-
-  const res = await fetch("/sections");
-  const sections = await res.json();
-
-  const grid = document.getElementById("grid");
-  grid.innerHTML = "";
-
-  sections.forEach(s => {
-    const card = document.createElement("div");
-    card.className = "card section-card";
-    card.dataset.sectionId = String(s.id);
-    card.draggable = false;
-
-    const color = (s.color || "slate").toLowerCase();
-
-    const titleBlock = editMode
-      ? `
-        <div class="edit-inline">
-          <input id="rename-${s.id}" value="${escapeAttr(s.name)}">
-          <button class="btn-small" onclick="updateSection(${s.id})">Update</button>
-
-          <select id="color-${s.id}">
-            ${colorOptionsHtml(color)}
-          </select>
-        </div>
-      `
-      : `<h3 style="margin:0">${escapeHtml(s.name)}</h3>`;
-
-    card.innerHTML = `
-      <div class="section-color-bar c-${color}"></div>
-
-      <div class="section-header">
-        <div class="section-left">
-          <span class="section-handle ${editMode ? "" : "hidden"}" title="Drag section">☰</span>
-          ${titleBlock}
-        </div>
-        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteSection(${s.id})">🗑️</button>
-      </div>
-
-      <div class="row ${editMode ? "" : "hidden"}">
-        <input id="title-${s.id}" placeholder="Title">
-        <input id="url-${s.id}" placeholder="https://...">
-        <button onclick="addLink(${s.id})">Add</button>
-      </div>
-
-      <div id="links-${s.id}"></div>
-    `;
-
-    if (editMode) addSectionDnDHandlers(card);
-    grid.appendChild(card);
-
-    const linksDiv = card.querySelector(`#links-${s.id}`);
-
-    s.links.forEach(l => {
-      const row = document.createElement("div");
-      row.className = "link-row";
-      row.dataset.linkId = String(l.id);
-      row.draggable = false;
-
-      const linkView = `<a href="${l.url}" target="_blank" class="link-title">${escapeHtml(l.title)}</a>`;
-
-      const linkEdit = `
-        <input id="lt-${l.id}" value="${escapeAttr(l.title)}">
-        <input id="lu-${l.id}" value="${escapeAttr(l.url)}">
-        <button class="btn-small" onclick="updateLink(${l.id})">Update</button>
-      `;
-
-      row.innerHTML = `
-        <span class="drag-handle ${editMode ? "" : "hidden"}" title="Drag link">☰</span>
-        ${editMode ? linkEdit : linkView}
-        <button class="btn-danger ${editMode ? "" : "hidden"}" onclick="deleteLink(${l.id})">✕</button>
-      `;
-
-      if (editMode) addLinkDnDHandlers(row);
-      linksDiv.appendChild(row);
+  async function apiGet(path){
+    const r = await fetch(API + path);
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiPost(path, body){
+    const r = await fetch(API + path, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
     });
-  });
-}
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiPut(path, body){
+    const r = await fetch(API + path, {
+      method:"PUT",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+  async function apiDelete(path){
+    const r = await fetch(API + path, { method:"DELETE" });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
 
-/* -------- Sections CRUD -------- */
-async function createSection(){
-  if (!editMode) return;
-  const input = document.getElementById("sectionName");
-  const name = input.value.trim();
-  if (!name) return;
+  function escapeHtml(s){
+    return (s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  }
 
-  const r = await fetch("/sections", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name})
-  });
+  function render(){
+    elGrid.innerHTML = "";
 
-  if (!r.ok) return alert(await r.text());
-  input.value = "";
-  load();
-}
+    for(const sec of state.sections){
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.sectionId = sec.id;
 
-async function updateSection(id){
-  if (!editMode) return;
-  const name = document.getElementById(`rename-${id}`).value.trim();
-  const color = document.getElementById(`color-${id}`).value;
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title">
+            <span class="drag-handle edit-only" title="Drag section">⠿</span>
+            <span>${escapeHtml(sec.name)}</span>
+            <button class="icon-btn edit-only" data-action="rename-section" data-section-id="${sec.id}" title="Rename">✎</button>
+          </div>
 
-  if (!name) return alert("Name cannot be empty");
+          <div class="mini-actions edit-only">
+            <button class="icon-btn danger" data-action="delete-section" data-section-id="${sec.id}" title="Delete section">Del</button>
+          </div>
+        </div>
 
-  const r = await fetch(`/sections/${id}`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name, color})
-  });
+        <div class="links" id="links-${sec.id}">
+          ${sec.links.map(l => `
+            <div class="link-row" data-link-id="${l.id}">
+              <div class="link-left">
+                <span class="drag-handle edit-only" title="Drag link">⠿</span>
+                <div style="min-width:0;">
+                  <div class="link-title">
+                    <a href="${escapeHtml(l.url)}" target="_blank" rel="noreferrer">${escapeHtml(l.title)}</a>
+                  </div>
+                  <div class="link-url">${escapeHtml(l.url)}</div>
+                </div>
+              </div>
 
-  if (!r.ok) return alert(await r.text());
-  load();
-}
+              <div class="mini-actions edit-only">
+                <button class="icon-btn" data-action="edit-link" data-link-id="${l.id}">Edit</button>
+                <button class="icon-btn danger" data-action="delete-link" data-link-id="${l.id}">Del</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
 
-async function deleteSection(id){
-  if (!editMode) return;
-  if(!confirm("Delete section and all its links?")) return;
+        <div class="add-area">
+          <div class="row">
+            <input placeholder="Title" id="title-${sec.id}">
+            <input placeholder="https://..." id="url-${sec.id}">
+            <button class="btn" data-action="add-link" data-section-id="${sec.id}">Add</button>
+          </div>
+        </div>
+      `;
 
-  const r = await fetch(`/sections/${id}`, {method:"DELETE"});
-  if (!r.ok) return alert(await r.text());
-  load();
-}
+      elGrid.appendChild(card);
+    }
 
-/* -------- Links CRUD -------- */
-async function addLink(sid){
-  if (!editMode) return;
-  const title = document.getElementById(`title-${sid}`).value.trim();
-  const url = document.getElementById(`url-${sid}`).value.trim();
-  if(!title || !url) return;
+    // wire actions
+    elGrid.querySelectorAll("[data-action]").forEach(btn => {
+      btn.addEventListener("click", handleActionClick);
+    });
+  }
 
-  const r = await fetch(`/sections/${sid}/links`, {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({title, url})
-  });
+  async function handleActionClick(e){
+    const a = e.currentTarget.dataset.action;
 
-  if (!r.ok) return alert(await r.text());
+    try{
+      if(a === "delete-section"){
+        const id = Number(e.currentTarget.dataset.sectionId);
+        if(confirm("Delete section and all links?")){
+          await apiDelete(`/sections/${id}`);
+          await load();
+        }
+      }
 
-  document.getElementById(`title-${sid}`).value="";
-  document.getElementById(`url-${sid}`).value="";
-  load();
-}
+      if(a === "rename-section"){
+        const id = Number(e.currentTarget.dataset.sectionId);
+        const sec = state.sections.find(s => s.id === id);
+        const name = prompt("New section name:", sec?.name ?? "");
+        if(name && name.trim()){
+          await apiPut(`/sections/${id}`, { name: name.trim() });
+          await load();
+        }
+      }
 
-async function updateLink(linkId){
-  if (!editMode) return;
-  const title = document.getElementById(`lt-${linkId}`).value.trim();
-  const url = document.getElementById(`lu-${linkId}`).value.trim();
-  if(!title || !url) return;
+      if(a === "add-link"){
+        const sectionId = Number(e.currentTarget.dataset.sectionId);
+        const title = document.getElementById(`title-${sectionId}`).value.trim();
+        const url = document.getElementById(`url-${sectionId}`).value.trim();
+        if(!title) return alert("Title required");
+        if(!url) return alert("URL required");
+        await apiPost(`/sections/${sectionId}/links`, { title, url });
+        document.getElementById(`title-${sectionId}`).value = "";
+        document.getElementById(`url-${sectionId}`).value = "";
+        await load();
+      }
 
-  const r = await fetch(`/links/${linkId}`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({title, url})
-  });
+      if(a === "delete-link"){
+        const linkId = Number(e.currentTarget.dataset.linkId);
+        if(confirm("Delete this link?")){
+          await apiDelete(`/links/${linkId}`);
+          await load();
+        }
+      }
 
-  if (!r.ok) return alert(await r.text());
-  load();
-}
+      if(a === "edit-link"){
+        const linkId = Number(e.currentTarget.dataset.linkId);
+        // Find current link values
+        let found = null;
+        for(const s of state.sections){
+          const l = s.links.find(x => x.id === linkId);
+          if(l){ found = l; break; }
+        }
+        if(!found) return;
 
-async function deleteLink(id){
-  if (!editMode) return;
-  if(!confirm("Delete this link?")) return;
+        const newTitle = prompt("Title:", found.title);
+        if(newTitle === null) return;
 
-  const r = await fetch(`/links/${id}`, {method:"DELETE"});
-  if (!r.ok) return alert(await r.text());
-  load();
-}
+        const newUrl = prompt("URL:", found.url);
+        if(newUrl === null) return;
 
-/* -------- Reorder helpers -------- */
-function getSectionOrder(){
-  return [...document.querySelectorAll(".section-card")]
-    .map(el => safeInt(el.dataset.sectionId))
-    .filter(n => n !== null);
-}
+        await apiPut(`/links/${linkId}`, { title: newTitle.trim(), url: newUrl.trim() });
+        await load();
+      }
 
-function getLinkOrder(sectionId){
-  const container = document.getElementById(`links-${sectionId}`);
-  if (!container) return [];
-  return [...container.querySelectorAll(".link-row")]
-    .map(el => safeInt(el.dataset.linkId))
-    .filter(n => n !== null);
-}
+    }catch(err){
+      alert(String(err));
+    }
+  }
 
-async function saveSectionOrder(){
-  const ordered = getSectionOrder();
-  if (!ordered.length) return;
+  function destroySortables(){
+    if(state.sectionSortable){
+      state.sectionSortable.destroy();
+      state.sectionSortable = null;
+    }
+    for(const s of state.linkSortables.values()){
+      try{ s.destroy(); }catch(_){}
+    }
+    state.linkSortables.clear();
+  }
 
-  const r = await fetch(`/sections/reorder`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ ordered_ids: ordered })
-  });
+  function enableSortables(){
+    destroySortables();
 
-  if (!r.ok) alert(`Section reorder failed: ${await r.text()}`);
-}
+    // Sections sortable (grid)
+    state.sectionSortable = new Sortable(elGrid, {
+      animation: 150,
+      handle: ".card-header .drag-handle",
+      draggable: ".card",
+      onStart: () => document.body.classList.add("dragging"),
+      onEnd: async () => {
+        document.body.classList.remove("dragging");
+        // collect section ids from DOM
+        const ordered = [...elGrid.querySelectorAll(".card")].map(c => Number(c.dataset.sectionId));
+        try{
+          await apiPut("/sections-reorder", { ordered_ids: ordered });
+        }catch(err){
+          alert("Section reorder failed: " + err);
+        }
+      }
+    });
 
-async function saveLinkOrder(sectionId){
-  const ordered = getLinkOrder(sectionId);
-  if (!ordered.length) return;
+    // Links sortable per section
+    for(const sec of state.sections){
+      const listEl = document.getElementById(`links-${sec.id}`);
+      if(!listEl) continue;
 
-  const r = await fetch(`/sections/${sectionId}/links/reorder`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ ordered_ids: ordered })
-  });
+      const sortable = new Sortable(listEl, {
+        animation: 150,
+        handle: ".drag-handle",
+        draggable: ".link-row",
+        onStart: () => document.body.classList.add("dragging"),
+        onEnd: async () => {
+          document.body.classList.remove("dragging");
+          const ordered = [...listEl.querySelectorAll(".link-row")].map(r => Number(r.dataset.linkId));
+          try{
+            await apiPut(`/sections/${sec.id}/links-reorder`, { ordered_ids: ordered });
+          }catch(err){
+            alert("Link reorder failed: " + err);
+          }
+        }
+      });
 
-  if (!r.ok) alert(`Link reorder failed: ${await r.text()}`);
-}
+      state.linkSortables.set(sec.id, sortable);
+    }
+  }
 
-/* -------- DnD Sections -------- */
-function addSectionDnDHandlers(card){
-  const grid = document.getElementById("grid");
-  const handle = card.querySelector(".section-handle");
-  if (!handle) return;
+  async function load(){
+    state.sections = await apiGet("/sections");
+    render();
+    if(state.editMode) enableSortables();
+  }
 
-  handle.draggable = true;
-
-  handle.addEventListener("dragstart", (e) => {
-    draggedSectionCard = card;
-    card.classList.add("dragging");
-    e.dataTransfer.setData("text/plain", card.dataset.sectionId || "");
-    e.dataTransfer.effectAllowed = "move";
-  });
-
-  handle.addEventListener("dragend", async () => {
-    card.classList.remove("dragging");
-    draggedSectionCard = null;
-    await saveSectionOrder();
-  });
-
-  card.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    if (!draggedSectionCard) return;
-
-    const after = [...grid.querySelectorAll(".section-card:not(.dragging)")]
-      .find(el => e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2);
-
-    if (after) grid.insertBefore(draggedSectionCard, after);
-    else grid.appendChild(draggedSectionCard);
-  });
-}
-
-/* -------- DnD Links -------- */
-function addLinkDnDHandlers(row){
-  const handle = row.querySelector(".drag-handle");
-  if (!handle) return;
-
-  handle.draggable = true;
-
-  handle.addEventListener("dragstart", (e) => {
-    draggedLinkEl = row;
-    row.classList.add("dragging");
-    e.dataTransfer.setData("text/plain", row.dataset.linkId || "");
-    e.dataTransfer.effectAllowed = "move";
-  });
-
-  handle.addEventListener("dragend", async () => {
-    row.classList.remove("dragging");
-    const secCard = row.closest(".section-card");
-    const sid = safeInt(secCard?.dataset.sectionId);
-    draggedLinkEl = null;
-    if (!sid) return;
-    await saveLinkOrder(sid);
-  });
-
-  row.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    if (!draggedLinkEl) return;
-
-    const container = row.parentElement;
-    const after = [...container.querySelectorAll(".link-row:not(.dragging)")]
-      .find(child => e.clientY < child.getBoundingClientRect().top + child.offsetHeight / 2);
-
-    if (after) container.insertBefore(draggedLinkEl, after);
-    else container.appendChild(draggedLinkEl);
-  });
-}
-
-/* -------- Escapes -------- */
-function escapeHtml(str){
-  return String(str)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-function escapeAttr(str){
-  return String(str)
-    .replaceAll("&","&amp;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;");
-}
-
-load();
+  // init
+  load().catch(err => alert(String(err)));
 </script>
 </body>
 </html>
