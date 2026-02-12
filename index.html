@@ -230,14 +230,13 @@
   </div>
 
 <script>
-  // Same origin (served by FastAPI static mount)
-  const API = "";
+  const API = ""; // same origin
 
   let state = {
     editMode: false,
     sections: [],
     sectionSortable: null,
-    linkSortables: new Map(), // sectionId -> sortable instance
+    linkSortables: new Map(),
   };
 
   const elGrid = document.getElementById("sectionsGrid");
@@ -250,11 +249,8 @@
     editBtn.style.display = on ? "none" : "inline-flex";
     saveBtn.style.display = on ? "inline-flex" : "none";
     render();
-    if(on){
-      enableSortables();
-    }else{
-      destroySortables();
-    }
+    if(on) enableSortables();
+    else destroySortables();
   }
 
   editBtn.addEventListener("click", () => setEditMode(true));
@@ -355,7 +351,6 @@
       elGrid.appendChild(card);
     }
 
-    // wire actions
     elGrid.querySelectorAll("[data-action]").forEach(btn => {
       btn.addEventListener("click", handleActionClick);
     });
@@ -405,7 +400,7 @@
 
       if(a === "edit-link"){
         const linkId = Number(e.currentTarget.dataset.linkId);
-        // Find current link values
+
         let found = null;
         for(const s of state.sections){
           const l = s.links.find(x => x.id === linkId);
@@ -442,7 +437,7 @@
   function enableSortables(){
     destroySortables();
 
-    // Sections sortable (grid)
+    // ✅ Sections sortable (uses YOUR endpoint /sections-reorder)
     state.sectionSortable = new Sortable(elGrid, {
       animation: 150,
       handle: ".card-header .drag-handle",
@@ -450,17 +445,19 @@
       onStart: () => document.body.classList.add("dragging"),
       onEnd: async () => {
         document.body.classList.remove("dragging");
-        // collect section ids from DOM
-        const ordered = [...elGrid.querySelectorAll(".card")].map(c => Number(c.dataset.sectionId));
+        const ordered = [...elGrid.querySelectorAll(".card")]
+          .map(c => Number(c.dataset.sectionId))
+          .filter(n => Number.isFinite(n));
+
         try{
-          await apiPut("/sections-reorder", { ordered_ids: ordered });
+          await apiPut("/sections-reorder", { ordered_ids: ordered }); // ✅ FIXED
         }catch(err){
           alert("Section reorder failed: " + err);
         }
       }
     });
 
-    // Links sortable per section
+    // ✅ Links sortable (uses YOUR endpoint /sections/{id}/links-reorder)
     for(const sec of state.sections){
       const listEl = document.getElementById(`links-${sec.id}`);
       if(!listEl) continue;
@@ -472,9 +469,12 @@
         onStart: () => document.body.classList.add("dragging"),
         onEnd: async () => {
           document.body.classList.remove("dragging");
-          const ordered = [...listEl.querySelectorAll(".link-row")].map(r => Number(r.dataset.linkId));
+          const ordered = [...listEl.querySelectorAll(".link-row")]
+            .map(r => Number(r.dataset.linkId))
+            .filter(n => Number.isFinite(n));
+
           try{
-            await apiPut(`/sections/${sec.id}/links-reorder`, { ordered_ids: ordered });
+            await apiPut(`/sections/${sec.id}/links-reorder`, { ordered_ids: ordered }); // ✅ FIXED
           }catch(err){
             alert("Link reorder failed: " + err);
           }
@@ -491,7 +491,6 @@
     if(state.editMode) enableSortables();
   }
 
-  // init
   load().catch(err => alert(String(err)));
 </script>
 </body>
